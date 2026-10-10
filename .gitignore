@@ -28,7 +28,7 @@ patches.json
 /message*.txt
 /*.zip
 /docs/ISSUE_ACTION_PLAN_*.md
-/deps/
+/deps
 
 # Editors and macOS
 .vscode/

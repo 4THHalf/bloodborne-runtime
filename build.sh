@@ -119,34 +119,35 @@ if [[ ! -f $atrac9_lib || -n $(find third_party/LibAtrac9/C/src -newer "$atrac9_
     for source in "${atrac9[@]}"; do "$CC" "${arch[@]}" -std=c99 -O2 -g -w -c "$source" -o "out/atrac9/$(basename "${source%.c}").o"; done
     rm -f "$atrac9_lib" && ar rcs "$atrac9_lib" out/atrac9/*.o
 fi
-# bbcpu (src/cpu, docs/ARM64_NATIVE.md): runs the game's x86-64 code through the translator
+# bbcpu (recomp/src/cpu: the bloodborne-recomp submodule, its docs/ARM64_NATIVE.md): runs the
+# game's x86-64 code through the translator
 # (macOS; BB_CPU=interp on x86-64). Zydis decodes the guest's instructions.
 cpu=()
 if (( macos )); then
     rm -rf out/cpu && mkdir -p out/cpu
-    for source in src/cpu/*.c src/cpu/hostcall.S; do
+    for source in recomp/src/cpu/*.c recomp/src/cpu/hostcall.S; do
         "$CC" "${arch[@]}" -std=gnu11 -O2 -g -Wall -Wextra -Werror -Wno-unused-parameter -I"$deps/include" \
             -c "$source" -o "out/cpu/$(basename "$source").o"
     done
     rm -f out/libbbcpu.a && ar rcs out/libbbcpu.a out/cpu/*.o
     cpu=(out/libbbcpu.a "$deps/lib/libZydis.a")
 fi
-"$CC" "${arch[@]}" -std=c11 -O2 -g -Wall -Wextra -Werror "${warnings[@]}" -pthread "${probe_flags[@]}" "${includes[@]}" -I. -Isrc src/probe.c "${runtime[@]}" src/vulkan_smoke.c "$atrac9_lib" "${cpu[@]}" -lm "${gpu[@]}" "${libraries[@]}" -o out/bb-probe
+"$CC" "${arch[@]}" -std=c11 -O2 -g -Wall -Wextra -Werror "${warnings[@]}" -pthread "${probe_flags[@]}" "${includes[@]}" -I. -Isrc -Irecomp/src src/probe.c "${runtime[@]}" src/vulkan_smoke.c "$atrac9_lib" "${cpu[@]}" -lm "${gpu[@]}" "${libraries[@]}" -o out/bb-probe
 echo "Built $PWD/out/bb-probe"
 # GPU check for run.sh (live_resolution=auto) and the launcher's gamepad list (--gamepads).
 "$CC" "${arch[@]}" -std=c11 -O2 -Wall -Wextra -Werror "${includes[@]}" tools/gpu_capabilities.c "${libraries[@]}" -o out/bb-gpu-capabilities
 if [[ ${1:-} == --test ]]; then
-    "$CC" "${arch[@]}" -std=c11 -O2 -g -Wall -Wextra -Werror -pthread "${includes[@]}" -I. -Isrc tests/test_pad.c src/platform.c "${libraries[@]}" -o out/pad-test
+    "$CC" "${arch[@]}" -std=c11 -O2 -g -Wall -Wextra -Werror -pthread "${includes[@]}" -I. -Isrc -Irecomp/src tests/test_pad.c src/platform.c "${libraries[@]}" -o out/pad-test
     out/pad-test
-    "$CC" "${arch[@]}" -std=c11 -O2 -g -Wall -Wextra -Werror "${warnings[@]}" -pthread "${includes[@]}" -I. -Isrc tests/test_runtime.c "${runtime[@]}" "$atrac9_lib" "${cpu[@]}" -lm "${gpu[@]}" "${libraries[@]}" -o out/runtime-test
+    "$CC" "${arch[@]}" -std=c11 -O2 -g -Wall -Wextra -Werror "${warnings[@]}" -pthread "${includes[@]}" -I. -Isrc -Irecomp/src tests/test_runtime.c "${runtime[@]}" "$atrac9_lib" "${cpu[@]}" -lm "${gpu[@]}" "${libraries[@]}" -o out/runtime-test
     out/runtime-test
-    "$CC" "${arch[@]}" -std=c11 -O2 -g -Wall -Wextra -Werror -pthread -Isrc tests/test_file_mods.c src/platform.c -o out/file-mods-test
+    "$CC" "${arch[@]}" -std=c11 -O2 -g -Wall -Wextra -Werror -pthread -Isrc -Irecomp/src tests/test_file_mods.c src/platform.c -o out/file-mods-test
     out/file-mods-test
-    "$CC" "${arch[@]}" -std=c11 -O2 -g -Wall -Wextra -Werror "${warnings[@]}" -pthread "${includes[@]}" -I. -Isrc tests/test_sema.c "${runtime[@]}" "$atrac9_lib" "${cpu[@]}" -lm "${gpu[@]}" "${libraries[@]}" -o out/sema-test
+    "$CC" "${arch[@]}" -std=c11 -O2 -g -Wall -Wextra -Werror "${warnings[@]}" -pthread "${includes[@]}" -I. -Isrc -Irecomp/src tests/test_sema.c "${runtime[@]}" "$atrac9_lib" "${cpu[@]}" -lm "${gpu[@]}" "${libraries[@]}" -o out/sema-test
     out/sema-test
-    "$CC" "${arch[@]}" -std=c11 -D_GNU_SOURCE -O2 -g -Wall -Wextra -Werror -I. -Isrc tests/test_content.c src/runtime_content.c src/platform.c -o out/content-test
+    "$CC" "${arch[@]}" -std=c11 -D_GNU_SOURCE -O2 -g -Wall -Wextra -Werror -I. -Isrc -Irecomp/src tests/test_content.c src/runtime_content.c src/platform.c -o out/content-test
     out/content-test
-    "$CC" "${arch[@]}" -std=c11 -O2 -g -Wall -Wextra -Werror -pthread -Isrc tests/test_guest_tls.c src/platform.c -o out/guest-tls-test
+    "$CC" "${arch[@]}" -std=c11 -O2 -g -Wall -Wextra -Werror -pthread -Isrc -Irecomp/src tests/test_guest_tls.c src/platform.c -o out/guest-tls-test
     out/guest-tls-test
     "${PYTHON:-python3}" tests/test_loader.py out/bb-probe
 fi

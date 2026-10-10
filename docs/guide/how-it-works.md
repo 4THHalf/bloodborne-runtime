@@ -9,7 +9,7 @@ the PS4 system functions the game calls, and translating its graphics to the Mac
 ## CPU: `bbcpu`, an x86-64 → arm64 translator
 
 The game's code has no source, so it is translated block by block into arm64 code while the game
-runs ([`src/cpu/`](../../src/cpu)), with an interpreter as a fallback.
+runs ([`recomp/src/cpu/`](https://github.com/PabloVSouza/bloodborne-recomp/tree/main/src/cpu)), with an interpreter as a fallback.
 
 - Guest registers live in host registers.
 - CPU flags are only computed where something reads them.
@@ -17,7 +17,7 @@ runs ([`src/cpu/`](../../src/cpu)), with an interpreter as a fallback.
 - A fuzzer checks each translation against the interpreter.
 
 This is what lets the game run natively, without Rosetta 2. Details:
-[Native arm64](../ARM64_NATIVE.md).
+[Native arm64](https://github.com/PabloVSouza/bloodborne-recomp/blob/main/docs/ARM64_NATIVE.md).
 
 ## System: the PS4 runtime
 
@@ -39,14 +39,14 @@ On top of the game's own rendering, the port adds:
 ## The app
 
 `Bloodborne.app` contains the game program, its libraries, a bundled Python and bash for the
-start-up scripts, and the launcher ([`launcher/app`](../../launcher/app), Tauri with React). The
+start-up scripts, and the launcher ([`launcher/app`](https://github.com/PabloVSouza/bloodborne-mac/tree/main/launcher/app) in bloodborne-mac, Tauri with React). The
 launcher writes the settings and starts `run.sh`. `run.sh` checks the game folder, prepares
 patches and mods, and starts the game.
 
 ## Where it is going: native code
 
 Translating the game's code works, but costs CPU time, and every frame still goes through the PS4
-GPU's command format, shadPS4 and MoltenVK. The [recompilation](../RECOMPILATION.md) work builds a
+GPU's command format, shadPS4 and MoltenVK. The [recompilation](https://github.com/PabloVSouza/bloodborne-recomp/blob/main/docs/RECOMPILATION.md) work builds a
 **recompiler**: a tool that runs on the player's Mac, reads their own `eboot.bin` and writes the
 game's functions out as C, compiled into a native library the game loads.
 

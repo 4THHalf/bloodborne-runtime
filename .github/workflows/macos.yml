@@ -1,18 +1,12 @@
-# Builds the native Apple Silicon program and packages it as Bloodborne.app in a DMG
-# (packaging/macos.sh).
-# Every push to main and every pull request: the package as a workflow artifact.
-# A tag v* (git tag v0.1.0 && git push origin v0.1.0): a GitHub release with the package.
+# Builds the runtime (bb-probe, the GPU library, bbcpu from the recomp submodule) on Apple Silicon:
+# every push to main and every pull request. The app and its releases: bloodborne-mac.
 name: macOS
 
 on:
   push:
     branches: [main]
-    tags: ['v*']
   pull_request:
   workflow_dispatch:
-
-permissions:
-  contents: write # releases
 
 concurrency:
   group: macos-${{ github.ref }}
@@ -26,7 +20,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
-          fetch-depth: 0 # git describe for the version
 
       # The newest Xcode on the image: the GPU library uses std::jthread and std::stop_token,
       # which Xcode 16's libc++ keeps behind -fexperimental-library.
@@ -41,23 +34,6 @@ jobs:
       - name: Tools
         run: brew install bash pkgconf glslang nasm cmake ninja
 
-      # The launcher (launcher/app): Tauri needs Node and Rust.
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: launcher/app/package-lock.json
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: launcher/app/src-tauri
-
-      - name: Launcher checks
-        working-directory: launcher/app
-        run: |
-          npm ci
-          npm run check
-
       # The libraries build-deps.sh builds (MoltenVK, SDL3, FFmpeg, ...): ~1 h without the cache.
       - name: Dependency cache
         uses: actions/cache@v4
@@ -67,33 +43,3 @@ jobs:
 
       - name: Build
         run: BB_ARCH=arm64 bash build.sh
-
-      - name: Package
-        run: |
-          if [[ $GITHUB_REF == refs/tags/v* ]]; then export BB_VERSION=${GITHUB_REF_NAME}; fi
-          bash packaging/macos.sh
-          echo "PACKAGE=$(ls dist/bloodborne_mac-*.dmg)" >> "$GITHUB_ENV"
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: bloodborne_mac-arm64
-          path: ${{ env.PACKAGE }}
-          if-no-files-found: error
-
-      - name: Release
-        if: startsWith(github.ref, 'refs/tags/v')
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          cat > notes.md <<'EOF'
-          Bloodborne for Apple Silicon: open the DMG and drag **Bloodborne** to Applications.
-          Nothing else to install. **No game files are included**: you need your own dump of
-          Bloodborne with the 1.09 update: see
-          [Game files](https://github.com/PabloVSouza/bloodborne-recomp/blob/main/docs/guide/game-files.md).
-
-          The app is not signed with an Apple Developer ID: the first time, right-click it and
-          choose **Open** (or System Settings → Privacy & Security → Open Anyway). See
-          `First start.txt` in the DMG.
-          EOF
-          gh release create "$GITHUB_REF_NAME" "$PACKAGE" --title "bloodborne_mac $GITHUB_REF_NAME" \
-            --notes-file notes.md --generate-notes

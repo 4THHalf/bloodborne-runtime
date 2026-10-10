@@ -4,25 +4,18 @@
 
 ## Playing
 
-1. [Installation](guide/installation.md): download, the first start, where your data lives.
-2. [Game files](guide/game-files.md): preparing your dump, supported editions, The Old Hunters.
-3. [Settings](guide/settings.md): the launcher, the in-game menu, languages, controllers.
-4. [Mods and patches](guide/mods-and-patches.md): installing mods, load order, third-party
-   patches.
-5. [Performance](guide/performance.md): what to expect, and the settings that matter.
-6. [Troubleshooting](guide/troubleshooting.md): common problems and known issues.
+The player guides (installation, game files, settings, mods, troubleshooting) are in
+[bloodborne-mac](https://github.com/PabloVSouza/bloodborne-mac/tree/main/docs/guide).
 
 ## Developing
 
-- [Building from source](guide/building.md): build, run, package, environment variables, tools.
-- [How it works](guide/how-it-works.md): the translator, the runtime, the renderer and the app.
-- [Native arm64](ARM64_NATIVE.md): the x86-64 → arm64 translator in depth.
+- [Building from source](guide/building.md): build, run, environment variables, tools.
+- [How it works](guide/how-it-works.md): the translator, the runtime, the renderer.
 - [macOS performance](MACOS_PERFORMANCE.md): measurements, what was changed, what could still be
   gained.
-- [Recompilation](RECOMPILATION.md): turning the game's code into native code with a recompiler
-  that runs on the player's own copy (in progress,
-  [status](https://github.com/PabloVSouza/bloodborne-recomp/wiki/Recompilation-status)).
-- [Launcher](../launcher/app/README.md): the launcher's stack and code conventions.
+- The CPU layer and the recompiler: [bloodborne-recomp](https://github.com/PabloVSouza/bloodborne-recomp)
+  ([native arm64](https://github.com/PabloVSouza/bloodborne-recomp/blob/main/docs/ARM64_NATIVE.md),
+  [recompilation](https://github.com/PabloVSouza/bloodborne-recomp/blob/main/docs/RECOMPILATION.md)).
 
 ## Project
 
@@ -31,7 +24,7 @@
 ## Upstream notes
 
 Design notes inherited from [bbport](https://github.com/deadinside28/bloodborne_pc), the Linux port
-this project is based on. Most of them are in Russian, and they describe the Linux version.
+this project is built on. Most of them are in Russian, and they describe the Linux version.
 
 - [Upstream README](upstream/README.md) ([Русский](upstream/README.ru.md))
 - [Roadmap](ROADMAP.md), [development log](DEVELOPMENT_LOG.ru.md), [mods](MODS.md)

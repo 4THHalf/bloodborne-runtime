@@ -4,42 +4,35 @@
 
 ## Requirements
 
-- A Mac with Apple Silicon. macOS 15 or newer is recommended.
-- Xcode Command Line Tools and [Homebrew](https://brew.sh):
+- macOS on Apple Silicon (macOS 15 or newer recommended), or Linux (the `shell.nix` environment).
+- macOS: Xcode Command Line Tools and [Homebrew](https://brew.sh):
 
   ```bash
   brew install bash pkgconf glslang nasm cmake ninja
   ```
 
-- For the app: Node 22+ and Rust (the launcher is a [Tauri](https://tauri.app) app).
-- A game folder prepared as in [Game files](game-files.md).
+- A game folder prepared as in
+  [Game files](https://github.com/PabloVSouza/bloodborne-mac/blob/main/docs/guide/game-files.md).
 
 ## Build and run
 
 ```bash
-git clone --recursive https://github.com/PabloVSouza/bloodborne-recomp.git
-cd bloodborne-recomp
+git clone --recursive https://github.com/PabloVSouza/bloodborne-runtime.git
+cd bloodborne-runtime
 bash build.sh                                  # the first run also builds the libraries (deps/)
 BB_GAME_DIR=/path/to/your/game bash run.sh
 ```
 
-- `build.sh` builds the native arm64 program. `BB_ARCH=x86_64` builds the older Rosetta 2 one.
+- `build.sh` builds the native program (on Apple Silicon bbcpu, from the `recomp/` submodule,
+  translates the game's code). `BB_ARCH=x86_64` builds the older Rosetta 2 one.
 - The first build compiles the dependencies (MoltenVK, SDL3, FFmpeg, ...) into `deps/` and takes
   a while.
 - From a checkout, saves and the shader cache go to `user/` and settings to `bbport.ini`.
+- The recompiled game: build a library with [bloodborne-recomp](https://github.com/PabloVSouza/bloodborne-recomp)
+  (in `recomp/`) and run with `BB_RECOMP_LIB=recomp/out/recomp/librecomp.dylib`.
 
-## The app and the DMG
-
-```bash
-bash packaging/macos.sh                        # Bloodborne.app and its DMG in dist/
-```
-
-The launcher lives in [`launcher/app`](../../launcher/app). Its
-[README](../../launcher/app/README.md) covers development (`npm run dev` previews it in a browser
-with sample data) and its code conventions.
-
-Releases are built by GitHub Actions (`.github/workflows/macos.yml`): pushing a `v*` tag builds the
-DMG and publishes a release.
+The macOS app (launcher, DMG, releases) is
+[bloodborne-mac](https://github.com/PabloVSouza/bloodborne-mac), which builds this repository.
 
 ## Environment variables
 
