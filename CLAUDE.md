@@ -29,6 +29,12 @@ tools/test_run.sh NAME [VAR=VALUE...]           # background run with a copy of 
 cd tests && python3 -m unittest discover -p 'test_*.py'
 ```
 
+The user's game dump is `~/Downloads/PS4/Bloodborne/CUSA03173`; `deps/` takes about an hour to
+build (the old checkout `~/projects/pablovsouza/bloodborne_pc/deps` can be symlinked in). Metal
+System Traces need `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`; what helped, what
+did not and what made things worse is in `docs/MACOS_PERFORMANCE.md` (read it before trying a
+performance idea).
+
 `test_probe.LoaderTests` fails on macOS (its images use 4 KiB-aligned segments; Macs have 16 KiB
 pages): known, not a regression. A healthy run in the Hunter's Dream is ~58–62 FPS on the user's
 M3 Pro; FPS is bound by rendering, so CPU-side changes are measured in CPU time.
@@ -64,7 +70,9 @@ to") and `docs/upstream/README*.md`, and bump the submodule in bloodborne-mac. O
   [bloodborne-runtime](https://github.com/PabloVSouza/bloodborne-runtime) ⊃ `recomp/` =
   [bloodborne-recomp](https://github.com/PabloVSouza/bloodborne-recomp). Commit in the repository
   that owns the file, push it, then bump the submodule pointer in the parent (runtime → recomp,
-  mac → runtime) and push that too.
+  mac → runtime) and push that too. Submodules are checked out at a commit (detached HEAD):
+  before editing inside `runtime/` or `runtime/recomp/`, run `git checkout main` (and
+  `git pull`) there. Separate clones of each repository side by side work the same way.
 - **Before any push, check `git remote get-url origin`** (a clone once still pointed at a local
   repository and a force-push landed there). Push to `main`; ask before force-pushing anything
   that existed before this session.

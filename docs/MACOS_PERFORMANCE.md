@@ -55,6 +55,17 @@ GPU time per frame at native 1080p:
   measurement) runs as fast as no motion vectors.
 - KosmicKrisp (Mesa's Vulkan on Metal 4): renders correctly, ~3× slower than MoltenVK.
 
+## Made things worse
+
+- A CPU fence on swapchain acquire.
+- Waiting on the CPU for each frame to be ready before presenting it (`BB_PRESENT_CPU_WAIT`):
+  "Bad PM4 packet" crashes while a save loaded; reverted.
+
+Measuring: the GPU timestamp profiler does not work on MoltenVK, and `ioreg`'s "Device
+Utilization" overstates how busy the GPU is; use Metal System Traces (`TRACE=1` in
+`tools/mac_bench.sh`, read with `tools/mst_summary.py` / `tools/mst_passes.py` /
+`tools/mst_shaders.py`; `xctrace` needs `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`).
+
 ## Where more could be gained
 
 1. **Idle time between Metal encoders, 6–8 ms a frame at 1080p.** Each switch between render,
