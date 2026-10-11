@@ -39,6 +39,13 @@ performance idea).
 pages): known, not a regression. A healthy run in the Hunter's Dream is ~58–62 FPS on the user's
 M3 Pro; FPS is bound by rendering, so CPU-side changes are measured in CPU time.
 
+## Command buffers
+
+The game's main thread and GXRenderThread both record into the main graphics command buffer while
+an area loads; `src/runtime_cmdbuf.c` holds a per-buffer lock across the game's command buffer
+methods (bbcpu guards; `BB_CB_GUARD=0`: off). `BB_CB_PROBE=1` reports any buffer two threads use at
+once, with their names and callers: the first thing to run on a "PM4 type 0" or "Bad PM4 packet".
+
 ## Rendering bugs
 
 Bisect bbport's optimizations first: `BB_TOGGLE_FILE` holds a mask of switches (bits 0–19, 30,
