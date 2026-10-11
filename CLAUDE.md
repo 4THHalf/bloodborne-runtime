@@ -30,7 +30,7 @@ cd tests && python3 -m unittest discover -p 'test_*.py'
 ```
 
 The user's game dump is `~/Downloads/PS4/Bloodborne/CUSA03173`; `deps/` takes about an hour to
-build (the old checkout `~/projects/pablovsouza/bloodborne_pc/deps` can be symlinked in). Metal
+build and records absolute paths (a moved or copied `deps/` must be rebuilt). Metal
 System Traces need `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`; what helped, what
 did not and what made things worse is in `docs/MACOS_PERFORMANCE.md` (read it before trying a
 performance idea).
