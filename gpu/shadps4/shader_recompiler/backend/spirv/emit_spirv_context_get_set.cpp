@@ -244,6 +244,9 @@ Id EmitGetAttributeU32(EmitContext& ctx, IR::Attribute attr, u32 comp) {
         return ctx.OpLoad(ctx.U32[1], ctx.output_layer);
     case IR::Attribute::PrimitiveId:
         if (ctx.runtime_info.fixed_quad_vertex) {
+            if (ctx.runtime_info.fixed_quad_vertex_count == 0) {
+                return ctx.OpLoad(ctx.U32[1], ctx.instance_id);
+            }
             return ctx.OpUDiv(ctx.U32[1], ctx.OpLoad(ctx.U32[1], ctx.vertex_index),
                               ctx.ConstU32(ctx.runtime_info.fixed_quad_vertex_count));
         }

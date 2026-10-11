@@ -33,6 +33,7 @@ struct GraphicsPipelineKey {
     std::array<size_t, MaxShaderStages> stage_hashes;
     std::array<vk::Format, MaxVertexBufferCount> vertex_buffer_formats;
     u32 patch_control_points;
+    u8 fixed_quad_outer;
     u32 num_color_attachments;
     std::array<Shader::PsColorBuffer, AmdGpu::NUM_COLOR_BUFFERS> color_buffers;
     std::array<AmdGpu::BlendControl, AmdGpu::NUM_COLOR_BUFFERS> blend_controls;

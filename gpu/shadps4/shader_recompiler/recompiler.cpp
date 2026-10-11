@@ -3,6 +3,7 @@
 
 #include "common/logging/classes.h"
 #include <array>
+#include <optional>
 #include <ranges>
 #include <span>
 #include "shader_recompiler/frontend/control_flow_graph.h"
@@ -55,6 +56,95 @@ static u8 FixedQuadOuter(const IR::Program& program, const RuntimeInfo& runtime_
         }
     }
     return 0;
+}
+
+using FixedQuadComponent = InfoPersistent::FixedQuadComponent;
+
+static std::optional<FixedQuadComponent> FixedQuadScalar(IR::Value value, u32 depth);
+
+static std::optional<FixedQuadComponent> FixedQuadVectorComponent(IR::Value value, u32 component,
+                                                                  u32 depth) {
+    if (depth > 16 || component >= 4) return std::nullopt;
+    const IR::Inst* inst = value.TryInst();
+    if (!inst) return std::nullopt;
+    switch (inst->GetOpcode()) {
+    case IR::Opcode::CompositeConstructF32x4:
+        return FixedQuadScalar(inst->Arg(component), depth + 1);
+    case IR::Opcode::CompositeShuffleF32x4: {
+        const auto selector = inst->Arg(component + 2);
+        if (selector.Type() != IR::Type::U32 || selector.U32() >= 8) return std::nullopt;
+        const u32 index = selector.U32();
+        return FixedQuadVectorComponent(inst->Arg(index < 4 ? 0 : 1), index % 4, depth + 1);
+    }
+    default:
+        return std::nullopt;
+    }
+}
+
+static std::optional<FixedQuadComponent> FixedQuadScalar(IR::Value value, u32 depth) {
+    if (depth > 16) return std::nullopt;
+    if (value.Type() == IR::Type::F32) {
+        return FixedQuadComponent{.constant = value.F32()};
+    }
+    const IR::Inst* inst = value.TryInst();
+    if (!inst) return std::nullopt;
+    switch (inst->GetOpcode()) {
+    case IR::Opcode::GetAttribute: {
+        const IR::Attribute attr = inst->Arg(0).Attribute();
+        const IR::Value component = inst->Arg(1);
+        if (attr < IR::Attribute::Param0 || attr >= IR::Attribute::Param0 + IR::NumParams ||
+            component.Type() != IR::Type::U32 || component.U32() >= 4) {
+            return std::nullopt;
+        }
+        return FixedQuadComponent{.source_attr = u8(u32(attr) - u32(IR::Attribute::Param0)),
+                                  .source_comp = u8(component.U32())};
+    }
+    case IR::Opcode::CompositeExtractF32x4: {
+        const auto component = inst->Arg(1);
+        if (component.Type() != IR::Type::U32) return std::nullopt;
+        return FixedQuadVectorComponent(inst->Arg(0), component.U32(), depth + 1);
+    }
+    default:
+        return std::nullopt;
+    }
+}
+
+static void MapFixedQuadLocalOutputs(IR::Program& program, const RuntimeInfo& runtime_info) {
+    Info& info = program.info;
+    if (info.hw_stage != HwStage::Local || info.sw_stage != SwStage::Vertex ||
+        program.blocks.size() != 2 ||
+        program.blocks.back()->Instructions().size() != 1 ||
+        program.blocks.back()->Instructions().front().GetOpcode() != IR::Opcode::Epilogue ||
+        runtime_info.hw.ls.ls_stride == 0 ||
+        runtime_info.hw.ls.ls_stride > IR::NumParams * 16) {
+        return;
+    }
+    const u32 count = (runtime_info.hw.ls.ls_stride + 15) / 16;
+    std::array<bool, IR::NumParams * 4> seen{};
+    for (const IR::Block* block : program.blocks) {
+        for (const IR::Inst& inst : block->Instructions()) {
+            if (inst.GetOpcode() != IR::Opcode::SetAttribute) {
+                if (inst.MayHaveSideEffects() &&
+                    inst.GetOpcode() != IR::Opcode::Prologue &&
+                    inst.GetOpcode() != IR::Opcode::Epilogue) return;
+                continue;
+            }
+            const auto attr = inst.Arg(0).Attribute();
+            const auto component = inst.Arg(2);
+            if (attr < IR::Attribute::Param0 || attr >= IR::Attribute::Param0 + count ||
+                component.Type() != IR::Type::U32 || component.U32() >= 4) {
+                return;
+            }
+            const u32 index = (u32(attr) - u32(IR::Attribute::Param0)) * 4 + component.U32();
+            if (seen[index]) return;
+            const auto mapped = FixedQuadScalar(inst.Arg(1), 0);
+            if (!mapped) return;
+            seen[index] = true;
+            info.fixed_quad_outputs[index] = *mapped;
+        }
+    }
+    if (std::ranges::none_of(seen, [](bool value) { return value; })) return;
+    info.fixed_quad_output_count = u8(count);
 }
 
 IR::BlockList GenerateBlocks(const IR::AbstractSyntaxList& syntax_list) {
@@ -188,6 +278,7 @@ IR::Program TranslateProgram(const std::span<const u32>& code, Pools& pools, Inf
     }
     Shader::Optimization::CollectShaderInfoPass(program, profile);
     info.fixed_quad_outer = FixedQuadOuter(program, runtime_info);
+    MapFixedQuadLocalOutputs(program, runtime_info);
     Shader::IR::DumpProgram(program, info);
 
     return program;

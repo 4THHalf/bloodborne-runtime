@@ -21,6 +21,7 @@
 #include "core/emulator_settings.h"
 #include "core/memory.h"
 #include "shader_recompiler/runtime_info.h"
+#include "shader_recompiler/frontend/fixed_quad_tessellation.h"
 #include "video_core/amdgpu/liverpool.h"
 #include "video_core/amdgpu/pm4_cmds.h"
 #include "video_core/buffer_cache/buffer.h"
@@ -1687,6 +1688,38 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
         buffer_cache.Preupload(budget);
     }
     const auto& regs = Regs();
+    static const bool fixed_probe = std::getenv("BB_FIXED_QUAD_PROBE") != nullptr;
+    if (fixed_probe) {
+        static std::atomic<u64> ls_hs_draws{0};
+        if (regs.stage_enable.raw == AmdGpu::ShaderStageEnable::VgtStages::LsHs) {
+            const u64 count = ls_hs_draws.fetch_add(1, std::memory_order_relaxed) + 1;
+            if (count == 1 || count % 4096 == 0) {
+                std::printf("Fixed quad probe: %llu LsHs draws, primitive %u\n",
+                            (unsigned long long)count, u32(regs.primitive_type));
+            }
+        }
+    }
+    // Build the synthetic vertices before binding resources or opening a pass. A GPU-written or
+    // unsupported source must use the original tessellation pipeline for this draw.
+    u32 fixed_quad_vertices = 0;
+    if (pipeline->GetGraphicsKey().fixed_quad_outer) {
+        fixed_quad_vertices = ExpandFixedQuads(pipeline, is_indexed, index_offset);
+        static const bool probe = std::getenv("BB_FIXED_QUAD_PROBE") != nullptr;
+        if (probe) {
+            static std::atomic<u32> reported{0};
+            if (reported.fetch_add(1, std::memory_order_relaxed) < 20) {
+                std::printf("Fixed quad draw: %u patches, outer %u, %s\n", regs.num_indices,
+                            pipeline->GetGraphicsKey().fixed_quad_outer,
+                            fixed_quad_vertices ? "triangles" : "tessellation fallback");
+            }
+        }
+        if (!fixed_quad_vertices) {
+            pipeline = pipeline_cache.GetGraphicsPipeline({}, nullptr, false, false);
+            used_prepared = nullptr;
+            if (!pipeline) return;
+        }
+    }
+    const bool fixed_quad = fixed_quad_vertices != 0;
     // bbport: the pass copying a finished frame to a display buffer; the previous draw's
     // target is that frame.
     if (camera_motion->Enabled() && regs.color_buffers[0] &&
@@ -1761,8 +1794,8 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
     const PreparedDraw* draw_prepared = bind_prepared;
     // bbport: vertex and index buffers are resolved while the helper binds textures (their
     // commands are recorded after BeginRendering, as before).
-    const bool guest_indexed = is_indexed && !quad_triangles && !rect_triangles;
-    draw_inputs = {pipeline, draw_prepared, index_offset, guest_indexed, true, false};
+    const bool guest_indexed = is_indexed && !quad_triangles && !rect_triangles && !fixed_quad;
+    draw_inputs = {pipeline, draw_prepared, index_offset, guest_indexed, !fixed_quad, false};
     const bool bound = BindResources(pipeline);
     bind_prepared = nullptr; // indirect draws and dispatches bind without prepared sharps
     const bool inputs_resolved = draw_inputs.resolved;
@@ -1773,7 +1806,7 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
     const auto state = BeginRendering(pipeline);
     const TakenClearsGuard taken_clears_guard{*this};
 
-    if (!inputs_resolved) {
+    if (!inputs_resolved && !fixed_quad) {
         ResolveVertexBuffers(pipeline, draw_prepared);
         if (guest_indexed) {
             ResolveIndexBuffer(index_offset);
@@ -1792,7 +1825,7 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
         if (!BindQuadTriangles(is_indexed, index_offset)) {
             return;
         }
-    } else if (is_indexed) {
+    } else if (is_indexed && !fixed_quad) {
         EmitIndexBuffer();
     }
 
@@ -1904,7 +1937,7 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
         (regs.num_indices > 6 || regs.num_instances.NumInstances() > 1)) {
         draw_jitter = upscaler->Jitter();
     }
-    UpdateDynamicState(pipeline, is_indexed);
+    UpdateDynamicState(pipeline, is_indexed && !fixed_quad);
     CommitTakenClears();
     MarkPass(pipeline, state);
     scheduler.BeginRendering(state);
@@ -1914,12 +1947,13 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
     const auto [vertex_offset, instance_offset] = GetDrawOffsets(regs, vs_info, fetch_shader);
 
     const vk::Pipeline handle = pipeline->Handle();
-    const u32 num_indices = rect_triangles   ? rect_vertices
+    const u32 num_indices = fixed_quad ? fixed_quad_vertices
+                            : rect_triangles   ? rect_vertices
                             : quad_triangles ? regs.num_indices / 4 * 6
                                              : regs.num_indices;
-    const bool draw_indexed = (is_indexed || quad_triangles) && !rect_triangles;
-    const u32 num_instances = regs.num_instances.NumInstances();
-    const u32 first_vertex = rect_triangles ? 0 : vertex_offset;
+    const bool draw_indexed = (is_indexed || quad_triangles) && !rect_triangles && !fixed_quad;
+    const u32 num_instances = fixed_quad ? regs.num_indices : regs.num_instances.NumInstances();
+    const u32 first_vertex = rect_triangles || fixed_quad ? 0 : vertex_offset;
     const u32 first_instance = instance_offset;
     const auto* ps_info = pipeline->GetStages()[u32(Shader::SwStage::Fragment)];
     const Breadcrumbs::Crumb crumb{
@@ -2893,6 +2927,134 @@ void Rasterizer::EmitIndexBuffer() {
 // six vertices per rect, the 4th corner computed from the other three as the rect-list TCS
 // computes it (positions decide which corner is the right angle). Returns the vertex count, 0 when
 // the draw cannot be expanded (skipped).
+u32 Rasterizer::ExpandFixedQuads(const GraphicsPipeline* pipeline, bool is_indexed,
+                                 u32 index_offset) {
+    BB_SECTION(EmitVertexBuffers);
+    const auto& regs = Regs();
+    const auto& local = pipeline->GetStage(Shader::SwStage::Vertex);
+    const auto& fetch = pipeline->GetFetchShader();
+    const u32 count = local.fixed_quad_output_count;
+    const u32 patches = regs.num_indices;
+    if (!fetch || count == 0 || patches == 0 || patches > 4096) return 0;
+    if (regs.num_instances.NumInstances() != 1 ||
+        std::get<1>(GetDrawOffsets(regs, local, fetch)) != 0) return 0;
+    const bool clockwise = regs.tess_config.topology == AmdGpu::TessellationTopology::TriangleCw;
+    const auto mesh = Shader::FixedQuadTriangles(pipeline->GetGraphicsKey().fixed_quad_outer, 1,
+                                                 clockwise);
+    if (mesh.empty()) return 0;
+
+    auto& ids = rect_vertex_ids;
+    ids.resize(patches);
+    const u32 vertex_offset = std::get<0>(GetDrawOffsets(regs, local, fetch));
+    if (is_indexed) {
+        const bool index16 = regs.index_buffer_type.index_type == AmdGpu::IndexType::Index16;
+        const u32 width = index16 ? 2 : 4;
+        const VAddr address =
+            regs.index_base_address.Address<VAddr>() + u64(index_offset) * width;
+        const u64 bytes = u64(patches) * width;
+        if (!memory->IsValidGpuMapping(address, 0) ||
+            memory->ClampRangeSize(address, bytes) != bytes ||
+            buffer_cache.IsRegionGpuModified(address, bytes)) return 0;
+        for (u32 i = 0; i < patches; ++i) {
+            ids[i] = vertex_offset + (index16 ? reinterpret_cast<const u16*>(address)[i]
+                                               : reinterpret_cast<const u32*>(address)[i]);
+        }
+    } else {
+        for (u32 i = 0; i < patches; ++i) ids[i] = vertex_offset + i;
+    }
+    const u32 max_id = *std::ranges::max_element(ids);
+    struct Source {
+        const u8* data{};
+        u32 stride{};
+        u32 components{};
+        bool unorm8{};
+    };
+    std::array<Source, Shader::IR::NumParams> sources{};
+    const bool prepared_sharps = packet_vsharps.size() == fetch->attributes.size();
+    std::array<bool, Shader::IR::NumParams> needed{};
+    for (u32 i = 0; i < count * 4; ++i) {
+        const auto source = local.fixed_quad_outputs[i].source_attr;
+        if (source != 0xFF) needed[source] = true;
+    }
+    for (u32 i = 0; i < fetch->attributes.size(); ++i) {
+        const auto& attr = fetch->attributes[i];
+        if (attr.semantic >= sources.size() || !needed[attr.semantic]) continue;
+        const auto buffer = prepared_sharps ? packet_vsharps[i] : attr.GetSharp(local);
+        const u32 components = FixedQuadCpuComponents(buffer.GetDataFmt(), buffer.GetNumberFmt());
+        const bool unorm8 = buffer.GetDataFmt() == AmdGpu::DataFormat::Format8_8_8_8 &&
+                            buffer.GetNumberFmt() == AmdGpu::NumberFormat::Unorm;
+        const u32 stride = buffer.GetStride();
+        const u32 element_bytes = components * (unorm8 ? 1 : sizeof(float));
+        if (components && stride &&
+            u64(max_id) > (std::numeric_limits<u64>::max() - element_bytes) / stride)
+            return 0;
+        const u64 bytes = u64(max_id) * stride + element_bytes;
+        if (!components || stride < element_bytes || (!unorm8 && (stride & 3)) ||
+            buffer.base_address == 0 || (!unorm8 && (buffer.base_address & 3)) ||
+            !memory->IsValidGpuMapping(buffer.base_address, 0) ||
+            memory->ClampRangeSize(buffer.base_address, bytes) != bytes ||
+            buffer_cache.IsRegionGpuModified(buffer.base_address, bytes)) return 0;
+        sources[attr.semantic] = {reinterpret_cast<const u8*>(buffer.base_address),
+                                  stride, components, unorm8};
+    }
+    for (u32 attr = 0; attr < count; ++attr) {
+        for (u32 comp = 0; comp < 4; ++comp) {
+            const auto& map = local.fixed_quad_outputs[attr * 4 + comp];
+            if (map.source_attr != 0xFF) {
+                if (map.source_attr >= sources.size() || !sources[map.source_attr].data ||
+                    map.source_comp >= sources[map.source_attr].components) return 0;
+            }
+        }
+    }
+
+    const u64 bytes = u64(patches) * count * 16 + mesh.size() * 8;
+    auto& stream = buffer_cache.GetStreamBuffer();
+    const auto [data, offset] = stream.Map(bytes, 16);
+    VertexInputs<vk::VertexInputBindingDivisorDescriptionEXT> divisors;
+    VertexInputs<AmdGpu::Buffer> guest_buffers;
+    auto& v = vertex_binds;
+    v.attributes.clear();
+    v.bindings.clear();
+    v.host_buffers.clear();
+    v.host_offsets.clear();
+    v.host_sizes.clear();
+    v.host_strides.clear();
+    pipeline->GetVertexInputs(v.attributes, v.bindings, divisors, guest_buffers, 1, 1);
+    v.num_buffers = count + 1;
+    u64 at = 0;
+    for (u32 attr = 0; attr < count; ++attr) {
+        auto* out = reinterpret_cast<std::array<float, 4>*>(data + at);
+        for (u32 patch = 0; patch < patches; ++patch) {
+            std::array<float, 4> value{};
+            for (u32 comp = 0; comp < 4; ++comp) {
+                const auto& map = local.fixed_quad_outputs[attr * 4 + comp];
+                value[comp] = map.constant;
+                if (map.source_attr != 0xFF) {
+                    const auto& source = sources[map.source_attr];
+                    const u8* element = source.data + u64(ids[patch]) * source.stride;
+                    value[comp] = source.unorm8
+                                      ? float(element[map.source_comp]) / 255.f
+                                      : reinterpret_cast<const float*>(element)[map.source_comp];
+                }
+            }
+            out[patch] = value;
+        }
+        v.host_buffers.push_back(stream.Handle());
+        v.host_offsets.push_back(offset + at);
+        v.host_sizes.push_back(u64(patches) * 16);
+        v.host_strides.push_back(16);
+        at += u64(patches) * 16;
+    }
+    auto* coords = reinterpret_cast<Shader::FixedQuadPoint*>(data + at);
+    std::copy(mesh.begin(), mesh.end(), coords);
+    v.host_buffers.push_back(stream.Handle());
+    v.host_offsets.push_back(offset + at);
+    v.host_sizes.push_back(mesh.size() * 8);
+    v.host_strides.push_back(8);
+    stream.Commit();
+    return u32(mesh.size());
+}
+
 u32 Rasterizer::ExpandRects(const GraphicsPipeline* pipeline, bool is_indexed, u32 index_offset) {
     BB_SECTION(EmitVertexBuffers);
     const auto& regs = Regs();
@@ -4767,7 +4929,7 @@ void Rasterizer::UpdateDynamicState(const GraphicsPipeline* pipeline, const bool
     BB_SECTION(UpdateDynamicState);
     UpdateViewportScissorState();
     UpdateDepthStencilState();
-    UpdatePrimitiveState(is_indexed);
+    UpdatePrimitiveState(pipeline, is_indexed);
     UpdateRasterizationState();
     UpdateColorBlendingState(pipeline);
 
@@ -5007,9 +5169,13 @@ void Rasterizer::UpdateDepthStencilState() const {
     }
 }
 
-void Rasterizer::UpdatePrimitiveState(const bool is_indexed) const {
+void Rasterizer::UpdatePrimitiveState(const GraphicsPipeline* pipeline,
+                                      const bool is_indexed) const {
     const auto& regs = Regs();
     auto& dynamic_state = scheduler.GetDynamicState();
+    const auto primitive = pipeline->GetGraphicsKey().fixed_quad_outer
+                               ? AmdGpu::PrimitiveType::TriangleList
+                               : regs.primitive_type;
 
     const auto is_list_topology = [](const AmdGpu::PrimitiveType type) {
         const auto topology = LiverpoolToVK::PrimitiveType(type);
@@ -5027,13 +5193,13 @@ void Rasterizer::UpdatePrimitiveState(const bool is_indexed) const {
 
     const auto prim_restart =
         (regs.enable_primitive_restart & 1) != 0 &&
-        (instance.IsListRestartSupported() || !is_list_topology(regs.primitive_type)) &&
-        (instance.IsPatchListRestartSupported() || !is_patch_list_topology(regs.primitive_type));
+        (instance.IsListRestartSupported() || !is_list_topology(primitive)) &&
+        (instance.IsPatchListRestartSupported() || !is_patch_list_topology(primitive));
     ASSERT_MSG(!is_indexed || !prim_restart || regs.primitive_restart_index == 0xFFFF ||
                    regs.primitive_restart_index == 0xFFFFFFFF,
                "Primitive restart index other than -1 is not supported yet");
 
-    const auto cull_mode = LiverpoolToVK::IsPrimitiveCulled(regs.primitive_type)
+    const auto cull_mode = LiverpoolToVK::IsPrimitiveCulled(primitive)
                                ? LiverpoolToVK::CullMode(regs.polygon_control.CullingMode())
                                : vk::CullModeFlagBits::eNone;
     const auto front_face = LiverpoolToVK::FrontFace(regs.polygon_control.front_face);

@@ -77,8 +77,9 @@ GPU's idle time and in what each pass costs.
 
 Each bar has 20 blocks, one per 5%. The percentages track completed deliverables in each step,
 not a prediction of remaining development time. N1 has four deliverables; deferred clears
-have passed visual, traced, and three-pair untraced checks. The fixed quad coordinate mesh is implemented
-and checked in isolation, but the triangle draw path is not complete, so it does not advance N1.
+have passed visual, traced, and three-pair untraced checks. The fixed quad triangle path is
+implemented behind an opt-in switch, but its CPU cost and trace have not passed the acceptance
+gate, so it does not advance N1.
 
 | Step | Progress | Next deliverable |
 |---|---|---|
@@ -151,9 +152,22 @@ The shader recompiler now recognizes the two fixed hull factor variants by their
 stores the result in shader metadata, and can emit the three observed domain shader variants as
 vertex SPIR-V modules for diagnosis (`BB_FIXED_QUAD_PROBE=1`). All three modules passed
 `spirv-val` for Vulkan 1.3. A shared quad mesh supplies the coordinates for both factor pairs,
-with a test for triangle count, winding and covered area. The renderer does not select these
-modules yet: local-shader output attributes must be carried into the vertex inputs and indexed
-patches must be expanded before a visual or performance comparison is valid.
+with a test for triangle count, winding and covered area. With `BB_FIXED_QUAD_TRIANGLES=1`, the renderer accepts only the recognized one-control-point
+quad shaders, maps simple local-shader outputs to vertex inputs, expands CPU-readable indexed
+patches, and draws the fixed coordinate mesh as triangles. Unsupported input formats, GPU-written
+inputs, other local-shader effects, or instance offsets use the original tessellation pipeline.
+This is an experiment and remains off by default.
+
+Two alternating untraced 60-second clinic pairs measured 45.94/47.21 and 47.86/49.38 FPS
+(off/on). Frame-time p90 was 23.76/25.22 and 22.16/22.42 ms; game CPU use was 499.8/529.9
+and 503.4/541.7%. A later per-patch, instanced input path reduced upload size, but a short
+on run still used 545.8% CPU. An 8-second off/on call-stack sample did not isolate the extra
+CPU use; it showed little time in patch expansion and substantial time in shader selection on
+both runs. Game-frame captures looked the same at the tested position, and a later short run
+confirmed that a stricter shader eligibility check still converted the observed draws. A
+Metal trace for this experiment stalled and produced no usable comparison. Keep the switch
+opt-in until alternating tests show no pacing or CPU regression and a valid trace confirms the
+expected reduction in tessellation compute passes.
 
 The existing copy hoist already batches copies before a pass. Grouping its non-overlapping
 regions by source and destination buffer was tested but not retained. In three usable Metal

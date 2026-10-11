@@ -106,7 +106,11 @@ Utilization" overstates how busy the GPU is; use Metal System Traces (`TRACE=1` 
    - The game's tessellated light draws (~48 a frame) become a compute pass plus a render-pass
      restart each on MoltenVK: ~2–3 ms (removing them entirely: 31 → 34 FPS). Their hull shader
      uses constant factors (outer 3, inner 1), so they could be pre-tessellated into ordinary
-     triangles (merging the LS, HS and DS stages in the recompiler).
+     triangles (merging the LS, HS and DS stages in the recompiler). An opt-in fixed-quad
+     triangle path (`BB_FIXED_QUAD_TRIANGLES=1`) converted the observed draws and improved
+     mean FPS in two alternating 60-second pairs, but p90 worsened in both and game CPU use
+     rose by 30–38 percentage points. It remains off by default pending a CPU fix and a valid
+     Metal trace.
    - Deferred color clears initially removed 3–4 separate clear encoders a frame in the clinic.
      The narrowed upscaler check removes more, but encoder counts have not been retraced.
    - Small buffer copies between passes (~1–1.5 ms): batch further.

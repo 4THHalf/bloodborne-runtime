@@ -267,7 +267,7 @@ struct RuntimeInfo {
     // Emit a domain shader as a vertex shader for a fixed, one-control-point quad patch.
     // Its per-patch attributes and tessellation coordinates become vertex inputs.
     bool fixed_quad_vertex;
-    u32 fixed_quad_vertex_count;
+    u32 fixed_quad_vertex_count; // zero: one patch per instance, PrimitiveId = InstanceIndex
     struct Properties {
         AmdGpu::FpDenormMode fp_denorm_mode32;
         AmdGpu::FpDenormMode fp_denorm_mode16_64;

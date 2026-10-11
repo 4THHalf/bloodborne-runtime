@@ -170,7 +170,14 @@ GraphicsPipeline::GraphicsPipeline(
     boost::container::static_vector<vk::PipelineShaderStageCreateInfo, MaxShaderStages>
         shader_stages;
     auto stage = u32(Shader::SwStage::Vertex);
-    if (infos[stage]) {
+    if (key.fixed_quad_outer) {
+        const auto domain = u32(Shader::SwStage::TessellationEval);
+        shader_stages.emplace_back(vk::PipelineShaderStageCreateInfo{
+            .stage = vk::ShaderStageFlagBits::eVertex,
+            .module = modules[domain],
+            .pName = "main",
+        });
+    } else if (infos[stage]) {
         shader_stages.emplace_back(vk::PipelineShaderStageCreateInfo{
             .stage = vk::ShaderStageFlagBits::eVertex,
             .module = modules[stage],
@@ -186,7 +193,7 @@ GraphicsPipeline::GraphicsPipeline(
         });
     }
     stage = u32(Shader::SwStage::TessellationControl);
-    if (infos[stage]) {
+    if (infos[stage] && !key.fixed_quad_outer) {
         shader_stages.emplace_back(vk::PipelineShaderStageCreateInfo{
             .stage = vk::ShaderStageFlagBits::eTessellationControl,
             .module = modules[stage],
@@ -205,7 +212,7 @@ GraphicsPipeline::GraphicsPipeline(
         });
     }
     stage = u32(Shader::SwStage::TessellationEval);
-    if (infos[stage]) {
+    if (infos[stage] && !key.fixed_quad_outer) {
         shader_stages.emplace_back(vk::PipelineShaderStageCreateInfo{
             .stage = vk::ShaderStageFlagBits::eTessellationEvaluation,
             .module = modules[stage],
@@ -456,6 +463,30 @@ void GraphicsPipeline::GetVertexInputs(
     VertexInputs<AmdGpu::Buffer>& guest_buffers, u32 step_rate_0, u32 step_rate_1,
     std::span<const AmdGpu::Buffer> sharps) const {
     using InstanceIdType = Shader::Gcn::VertexAttribute::InstanceIdType;
+    if (key.fixed_quad_outer) {
+        const u32 count = stages[u32(Shader::SwStage::Vertex)]->fixed_quad_output_count;
+        for (u32 location = 0; location <= count; ++location) {
+            const bool coord = location == count;
+            attributes.push_back(Attribute{
+                .location = location,
+                .binding = location,
+                .format = coord ? vk::Format::eR32G32Sfloat
+                                : vk::Format::eR32G32B32A32Sfloat,
+                .offset = 0,
+            });
+            bindings.push_back(Binding{
+                .binding = location,
+                .stride = coord ? 8u : 16u,
+                .inputRate = coord ? vk::VertexInputRate::eVertex
+                                   : vk::VertexInputRate::eInstance,
+            });
+            if constexpr (std::is_same_v<Binding, vk::VertexInputBindingDescription2EXT>) {
+                bindings.back().divisor = 1;
+            }
+            guest_buffers.emplace_back();
+        }
+        return;
+    }
     if (!fetch_shader || fetch_shader->attributes.empty()) {
         return;
     }
@@ -514,7 +545,10 @@ void GraphicsPipeline::BuildDescSetLayout(bool preloading) {
         if (!stage) {
             continue;
         }
-        const auto stage_bit = LogicalStageToStageBit[u32(stage->sw_stage)];
+        const auto stage_bit = key.fixed_quad_outer &&
+                                       stage->sw_stage == Shader::SwStage::TessellationEval
+                                   ? vk::ShaderStageFlagBits::eVertex
+                                   : LogicalStageToStageBit[u32(stage->sw_stage)];
         for (const auto& buffer : stage->buffers) {
             const auto sharp =
                 preloading ? AmdGpu::Buffer{}

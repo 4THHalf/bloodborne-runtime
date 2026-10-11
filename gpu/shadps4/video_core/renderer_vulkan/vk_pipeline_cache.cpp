@@ -42,6 +42,13 @@
 namespace Vulkan {
 
 namespace {
+bool FixedQuadTrianglesEnabled() {
+    static const bool enabled = [] {
+        const char* env = std::getenv("BB_FIXED_QUAD_TRIANGLES");
+        return env && env[0] == '1';
+    }();
+    return enabled;
+}
 // bbport: draws with a geometry shader stage are skipped where the GPU has none (Metal/MoltenVK).
 // Logged once and then every 10000: a warning per draw (hundreds a frame) went through the log
 // pipe into the launcher and cost frames by itself.
@@ -543,11 +550,16 @@ void NoteDrawTarget(const AmdGpu::Regs& regs) {
 
 const GraphicsPipeline* PipelineCache::GetGraphicsPipeline(const DrawIndirectParams params,
                                                            const PreparedDraw* prepared,
-                                                           bool indirect) {
+                                                           bool indirect, bool allow_fixed_quad) {
     used_prepared = nullptr;
     sel.indirect = indirect;
+    sel.allow_fixed_quad = allow_fixed_quad;
     NoteDrawTarget(liverpool->regs);
-    if (prepared) {
+    // Prepared workers currently decline hull shaders. Keep this guard if they gain that support:
+    // their original tessellation pipeline must not hide an opted-in fixed-quad selection.
+    const bool try_prepared = !allow_fixed_quad || !FixedQuadTrianglesEnabled() || indirect ||
+        liverpool->regs.stage_enable.raw != AmdGpu::ShaderStageEnable::VgtStages::LsHs;
+    if (prepared && try_prepared) {
         if (const auto* pipeline = TryPreparedPipeline(*prepared)) {
             used_prepared = prepared;
             return pipeline;
@@ -625,7 +637,9 @@ const GraphicsPipeline* PipelineCache::GetGraphicsPipeline(const DrawIndirectPar
             instance, scheduler, desc_heap, profile, sel.graphics_key, *pipeline_cache, sel.infos,
             sel.runtime_infos, sel.fetch_shader, sel.modules, sdata, false);
 
-        RegisterPipelineData(sel.graphics_key, pipeline_hash, sdata);
+        if (!sel.graphics_key.fixed_quad_outer) {
+            RegisterPipelineData(sel.graphics_key, pipeline_hash, sdata);
+        }
         ++num_new_pipelines;
 
         if (EmulatorSettings.IsShaderCollect()) {
@@ -645,7 +659,9 @@ const GraphicsPipeline* PipelineCache::GetGraphicsPipeline(const DrawIndirectPar
 const GraphicsPipeline* PipelineCache::FinishPipeline(const GraphicsPipelineKey& key,
                                                       PendingPipeline& job) {
     const auto pipeline_hash = std::hash<GraphicsPipelineKey>{}(key);
-    RegisterPipelineData(key, pipeline_hash, job.sdata);
+    if (!key.fixed_quad_outer) {
+        RegisterPipelineData(key, pipeline_hash, job.sdata);
+    }
     ++num_new_pipelines;
     if (EmulatorSettings.IsShaderCollect()) {
         for (const vk::ShaderModule module : job.modules) {
@@ -800,6 +816,19 @@ u32 RectAttributeComponents(vk::Format format) {
         return 4;
     default:
         return 0;
+    }
+}
+
+u32 FixedQuadCpuComponents(AmdGpu::DataFormat data, AmdGpu::NumberFormat number) {
+    if (data == AmdGpu::DataFormat::Format8_8_8_8 && number == AmdGpu::NumberFormat::Unorm)
+        return 4;
+    if (number != AmdGpu::NumberFormat::Float) return 0;
+    switch (data) {
+    case AmdGpu::DataFormat::Format32: return 1;
+    case AmdGpu::DataFormat::Format32_32: return 2;
+    case AmdGpu::DataFormat::Format32_32_32: return 3;
+    case AmdGpu::DataFormat::Format32_32_32_32: return 4;
+    default: return 0;
     }
 }
 
@@ -1008,6 +1037,7 @@ bool PipelineCache::RefreshGraphicsStages(PipelineSelection& sel) {
     sel.fetch_shader = std::nullopt;
 
     Shader::Backend::Bindings binding{};
+    Shader::Backend::Bindings domain_binding{};
     const auto bind_stage = [&](HwStage stage_in, SwStage stage_out) -> bool {
         const auto stage_in_idx = static_cast<u32>(stage_in);
         const auto stage_out_idx = static_cast<u32>(stage_out);
@@ -1068,6 +1098,7 @@ bool PipelineCache::RefreshGraphicsStages(PipelineSelection& sel) {
         if (!bind_stage(HwStage::Hull, SwStage::TessellationControl)) {
             return false;
         }
+        domain_binding = binding;
         if (!bind_stage(HwStage::Vertex, SwStage::TessellationEval)) {
             return false;
         }
@@ -1106,6 +1137,116 @@ bool PipelineCache::RefreshGraphicsStages(PipelineSelection& sel) {
     default:
         LOG_WARNING(Render_Vulkan, "unimplemented shader stage {}", (u32)regs.stage_enable.raw);
         return false;
+    }
+
+    if (std::getenv("BB_FIXED_QUAD_PROBE") &&
+        regs.stage_enable.raw == AmdGpu::ShaderStageEnable::VgtStages::LsHs) {
+        static std::atomic<u32> reported{0};
+        if (reported.fetch_add(1, std::memory_order_relaxed) < 16) {
+            const auto* hs = sel.infos[u32(SwStage::TessellationControl)];
+            const auto* ls = sel.infos[u32(SwStage::Vertex)];
+            const auto* ds = sel.infos[u32(SwStage::TessellationEval)];
+            std::printf("Fixed quad selection: primitive %u, restart %u, hull outer %u, "
+                        "local outputs %u, domain stride %u, patches %u, fetch %u\n",
+                        u32(key.prim_type), regs.enable_primitive_restart & 1,
+                        hs ? hs->fixed_quad_outer : 0, ls ? ls->fixed_quad_output_count : 0,
+                        sel.runtime_infos[u32(SwStage::TessellationEval)].sw.tes.hs_output_cp_stride,
+                        ds ? ds->uses_patches : 0, bool(sel.fetch_shader));
+        }
+    }
+
+    if (FixedQuadTrianglesEnabled() && sel.allow_fixed_quad && !sel.worker && !sel.indirect &&
+        regs.stage_enable.raw == AmdGpu::ShaderStageEnable::VgtStages::LsHs &&
+        key.prim_type == AmdGpu::PrimitiveType::PatchPrimitive &&
+        !(regs.enable_primitive_restart & 1)) {
+        const auto hs_index = u32(SwStage::TessellationControl);
+        const auto ds_index = u32(SwStage::TessellationEval);
+        const auto ls_index = u32(SwStage::Vertex);
+        const auto* hs = sel.infos[hs_index];
+        const auto* ds = sel.infos[ds_index];
+        const auto* ls = sel.infos[ls_index];
+        Shader::TessellationDataConstantBuffer tess_constants{};
+        if (hs) hs->ReadTessConstantBuffer(tess_constants);
+        const u32 count = Common::AlignUp(tess_constants.hs_cp_stride, 16) >> 4;
+        bool eligible = hs && ds && ls && hs->fixed_quad_outer && !ds->uses_patches &&
+                        !ds->loads.GetAny(Shader::IR::Attribute::InstanceId) &&
+                        ls->fixed_quad_output_count == count && count < MaxVertexBufferCount &&
+                        sel.fetch_shader;
+        const char* reject = eligible ? "none" : "base";
+        if (eligible) {
+            using InstanceIdType = Shader::Gcn::VertexAttribute::InstanceIdType;
+            std::array<bool, Shader::IR::NumParams> needed{};
+            for (u32 i = 0; i < count * 4; ++i) {
+                const auto source = ls->fixed_quad_outputs[i].source_attr;
+                if (source != 0xFF) needed[source] = true;
+            }
+            for (const auto& attr : sel.fetch_shader->attributes) {
+                if (attr.semantic >= needed.size() || !needed[attr.semantic]) continue;
+                const auto buffer = attr.GetSharp(*ls);
+                if (attr.GetStepRate() != InstanceIdType::None ||
+                    FixedQuadCpuComponents(buffer.GetDataFmt(), buffer.GetNumberFmt()) == 0) {
+                    eligible = false;
+                    reject = "fetch format or step rate";
+                    if (std::getenv("BB_FIXED_QUAD_PROBE")) {
+                        static std::atomic<u32> printed_format{0};
+                        if (printed_format.fetch_add(1, std::memory_order_relaxed) < 4)
+                            std::printf("Fixed quad fetch rejection: semantic %u, format %u/%u, "
+                                        "step %u\n", attr.semantic, u32(buffer.GetDataFmt()),
+                                        u32(buffer.GetNumberFmt()), u32(attr.GetStepRate()));
+                    }
+                    break;
+                }
+            }
+            for (u32 i = 0; eligible && i < count * 4; ++i) {
+                const auto& source = ls->fixed_quad_outputs[i];
+                if (source.source_attr == 0xFF) continue;
+                const auto it = std::ranges::find_if(sel.fetch_shader->attributes,
+                    [&](const auto& attr) { return attr.semantic == source.source_attr; });
+                eligible = it != sel.fetch_shader->attributes.end() &&
+                           source.source_comp < FixedQuadCpuComponents(
+                               it->GetSharp(*ls).GetDataFmt(),
+                               it->GetSharp(*ls).GetNumberFmt());
+                if (!eligible) reject = "source component";
+            }
+        }
+        if (std::getenv("BB_FIXED_QUAD_PROBE")) {
+            static std::atomic<u32> reported_eligibility{0};
+            if (reported_eligibility.fetch_add(1, std::memory_order_relaxed) < 16) {
+                std::printf("Fixed quad eligibility: %u, domain attributes %u, reject %s\n",
+                            eligible, count, reject);
+            }
+        }
+        if (eligible) {
+            const u32 outer = hs->fixed_quad_outer;
+            sel.runtime_infos[ds_index].InitFromTessConstants(tess_constants);
+            const size_t module_key = HashCombine(key.stage_hashes[ds_index], outer);
+            auto module = fixed_quad_modules.find(module_key);
+            if (module == fixed_quad_modules.end()) {
+                const auto params = AmdGpu::GetParams(regs.vs_program);
+                Shader::Info vertex_info{HwStage::Vertex, SwStage::TessellationEval, params};
+                auto vertex_runtime = sel.runtime_infos[ds_index];
+                vertex_runtime.fixed_quad_vertex = true;
+                vertex_runtime.fixed_quad_vertex_count = 0;
+                auto vertex_binding = domain_binding;
+                const auto ir = Shader::TranslateProgram(params.code, pools, vertex_info,
+                                                         vertex_runtime, profile);
+                auto spv = Shader::Backend::SPIRV::EmitSPIRV(profile, vertex_runtime, ir,
+                                                              vertex_binding);
+                const vk::ShaderModuleCreateInfo create_info{
+                    .codeSize = spv.size() * sizeof(u32), .pCode = spv.data()};
+                auto [result, unique] = instance.GetDevice().createShaderModuleUnique(create_info);
+                ASSERT_MSG(result == vk::Result::eSuccess,
+                           "Failed to compile fixed quad vertex shader: {}", vk::to_string(result));
+                module = fixed_quad_modules.emplace(module_key, std::move(unique)).first;
+            }
+            key.fixed_quad_outer = outer;
+            key.prim_type = AmdGpu::PrimitiveType::TriangleList;
+            sel.runtime_infos[ds_index].fixed_quad_vertex = true;
+            sel.runtime_infos[ds_index].fixed_quad_vertex_count = 0;
+            sel.modules[ds_index] = *module->second;
+            sel.modules[hs_index] = nullptr;
+            sel.modules[ls_index] = nullptr;
+        }
     }
 
     const auto* vs_info = sel.infos[static_cast<u32>(SwStage::Vertex)];
@@ -1149,6 +1290,10 @@ vk::ShaderModule PipelineCache::CompileModule(Shader::Info& info, Shader::Runtim
     static const bool fixed_quad_probe = std::getenv("BB_FIXED_QUAD_PROBE") != nullptr;
     if (fixed_quad_probe && info.sw_stage == SwStage::TessellationControl) {
         std::printf("Fixed quad hull eligibility: outer %u\n", info.fixed_quad_outer);
+    }
+    if (fixed_quad_probe && info.hw_stage == HwStage::Local) {
+        std::printf("Fixed quad local output map: %u attributes\n",
+                    info.fixed_quad_output_count);
     }
     if (fixed_quad_probe && info.sw_stage == SwStage::TessellationEval &&
         runtime_info.sw.tes.tess_type == AmdGpu::TessellationType::Quad &&

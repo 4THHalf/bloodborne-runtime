@@ -17,8 +17,8 @@
 namespace Serialization {
 /* You should increment versions below once corresponding serialization scheme is changed. */
 static constexpr u32 ShaderBinaryVersion = 18u; // bbport: bounded motion-vector accesses; layer page-table pairs / guarded write-through stores (upstream 9)
-static constexpr u32 ShaderMetaVersion = 8u; // fixed quad tessellation eligibility in InfoPersistent
-static constexpr u32 PipelineKeyVersion = 5u; // bbport: Info layout (ImageResource::needs_native)
+static constexpr u32 ShaderMetaVersion = 9u; // fixed quad local output map in InfoPersistent
+static constexpr u32 PipelineKeyVersion = 6u; // fixed quad vertex pipeline key
 } // namespace Serialization
 
 namespace Vulkan {

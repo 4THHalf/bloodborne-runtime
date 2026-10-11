@@ -564,8 +564,13 @@ void EmitContext::DefineInputs() {
     case SwStage::TessellationEval: {
         const u32 num_attrs = Common::AlignUp(runtime_info.sw.tes.hs_output_cp_stride, 16) >> 4;
         if (runtime_info.fixed_quad_vertex) {
-            vertex_index =
-                DefineVariable(U32[1], spv::BuiltIn::VertexIndex, spv::StorageClass::Input);
+            if (runtime_info.fixed_quad_vertex_count == 0) {
+                instance_id = DefineVariable(U32[1], spv::BuiltIn::InstanceIndex,
+                                             spv::StorageClass::Input);
+            } else {
+                vertex_index = DefineVariable(U32[1], spv::BuiltIn::VertexIndex,
+                                              spv::StorageClass::Input);
+            }
             tess_coord = DefineInput(F32[2], num_attrs);
             Name(tess_coord, "fixed_quad_coord");
             if (num_attrs > 0) {

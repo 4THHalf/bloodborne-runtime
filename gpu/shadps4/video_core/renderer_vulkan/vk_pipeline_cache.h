@@ -12,6 +12,7 @@
 #include "shader_recompiler/profile.h"
 #include "shader_recompiler/recompiler.h"
 #include "shader_recompiler/specialization.h"
+#include "video_core/amdgpu/pixel_format.h"
 #include "video_core/renderer_vulkan/vk_compute_pipeline.h"
 #include "video_core/renderer_vulkan/vk_graphics_pipeline.h"
 #include "video_core/renderer_vulkan/vk_resource_pool.h"
@@ -98,6 +99,7 @@ struct PipelineSelection {
     struct PrepWorker* worker{}; ///< set: read-only selection for a draw-preparation worker
     /// bbport: an indirect draw (its vertex count is on the GPU: quad lists stay tessellated).
     bool indirect = false;
+    bool allow_fixed_quad = true; ///< false when CPU vertex expansion cannot safely read a draw
 };
 
 /// bbport: quad lists drawn as indexed triangle lists (QuadsAsTriangles) instead of through the
@@ -114,6 +116,9 @@ bool RectsAsTriangles();
 /// bbport: the components of a vertex attribute format ExpandRects computes corners in (32-bit
 /// floats), else 0.
 u32 RectAttributeComponents(vk::Format format);
+/// Components in a fetch format the CPU fixed-quad expander can reproduce. Check the guest
+/// encoding before SurfaceFormat can assert on an unsupported format.
+u32 FixedQuadCpuComponents(AmdGpu::DataFormat data, AmdGpu::NumberFormat number);
 
 /// bbport: a draw-preparation worker's own program state (see vk_draw_prep.h).
 struct PrepWorker {
@@ -150,7 +155,8 @@ public:
     /// `indirect`: the draw's arguments are in memory (bbport: never skipped while compiling).
     const GraphicsPipeline* GetGraphicsPipeline(const DrawIndirectParams params = {},
                                                 const PreparedDraw* prepared = nullptr,
-                                                bool indirect = false);
+                                                bool indirect = false,
+                                                bool allow_fixed_quad = true);
 
     /// bbport: worker side of draw preparation: selects the pipeline key for `sel.regs` without
     /// creating anything. False when a program or permutation does not exist yet.
@@ -211,6 +217,7 @@ private:
     Shader::Profile profile{};
     Shader::Pools pools;
     tsl::robin_map<size_t, std::unique_ptr<Program>> program_cache;
+    tsl::robin_map<size_t, vk::UniqueShaderModule> fixed_quad_modules;
     /// bbport: exclusive for program/permutation insertions, shared for worker lookups.
     std::shared_mutex programs_mutex;
     u64 prepared_hits = 0, prepared_misses = 0;
