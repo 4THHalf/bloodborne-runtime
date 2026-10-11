@@ -158,7 +158,7 @@ void SceneTargets::Copy(Entry& e, VideoCore::Image& original, bool to_native) {
                     vk::to_string(original.info.pixel_format).c_str(), original.info.size.width,
                     original.info.size.height, e.level);
     }
-    runtime.ResolvePendingClear(&original); // bbport: the handle is used directly below
+    runtime.ResolvePendingClear(&original, Runtime::ClearResolveReason::Copy);
     const vk::Image src = to_native ? vk::Image(e.image) : original.GetImage();
     const vk::Image dst = to_native ? original.GetImage() : vk::Image(e.image);
     if (ShaderResampled(original)) {

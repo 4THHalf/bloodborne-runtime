@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <atomic>
+#include <array>
 #include <cstdio>
 #include <cstdlib>
 #include <boost/container/small_vector.hpp>
@@ -243,7 +244,15 @@ bool Runtime::Transit(VideoCore::Image* image, vk::ImageLayout dst_layout,
                       std::optional<VideoCore::SubresourceRange> subres_range) {
     BeforeImageAccess();
     if (image->pending_clear) [[unlikely]] {
-        ResolvePendingClear(image);
+        const auto reason = (dst_access & (vk::AccessFlagBits2::eTransferRead |
+                                           vk::AccessFlagBits2::eTransferWrite))
+                                ? ClearResolveReason::Copy
+            : (dst_access & (vk::AccessFlagBits2::eShaderRead |
+                                             vk::AccessFlagBits2::eShaderSampledRead |
+                                             vk::AccessFlagBits2::eShaderStorageRead))
+                                ? ClearResolveReason::Sample
+                                : ClearResolveReason::OtherAccess;
+        ResolvePendingClear(image, reason);
     }
     if (scene_targets) scene_targets->NativeAccess(*image, dst_access);
     const size_t prev_num_barriers = static_cast<size_t>(image_barriers.size());
@@ -704,6 +713,18 @@ void Runtime::ResolveImage(VideoCore::Image* src, VideoCore::Image* dst,
 namespace {
 // bbport BB_DEFER_CLEARS: clears noted, taken as load actions, recorded on their own (diagnostics).
 std::atomic<u64> clears_deferred{0}, clears_taken{0}, clears_recorded{0};
+std::array<std::atomic<u64>, static_cast<size_t>(Runtime::ClearResolveReason::Count)> clear_reasons{};
+constexpr std::array<const char*, static_cast<size_t>(Runtime::ClearResolveReason::Count)>
+    clear_reason_names{"copy", "sample", "other access", "reduced pass", "upscaler redirect",
+                       "view range", "small render area", "multi-level/layer", "backing swap",
+                       "superseded", "other"};
+bool ClearReasonsEnabled() {
+    static const bool enabled = [] {
+        const char* env = std::getenv("BB_DEFER_CLEAR_REASONS");
+        return env && env[0] == '1';
+    }();
+    return enabled;
+}
 } // namespace
 
 bool Runtime::DeferClears() {
@@ -722,7 +743,7 @@ void Runtime::ClearImage(VideoCore::Image* dst, const VideoCore::SubresourceRang
     }
     // A later clear of the same range replaces a pending one: nothing used the image between.
     if (dst->pending_clear && dst->pending_clear_range != range) {
-        ResolvePendingClear(dst);
+        ResolvePendingClear(dst, ClearResolveReason::Superseded);
     }
     dst->pending_clear = true;
     dst->pending_clear_range = range;
@@ -734,15 +755,26 @@ void Runtime::ClearImage(VideoCore::Image* dst, const VideoCore::SubresourceRang
         std::printf("Deferred clears: %llu, %llu taken as load actions, %llu recorded on their own\n",
                     (unsigned long long)n, (unsigned long long)clears_taken.load(),
                     (unsigned long long)clears_recorded.load());
+        if (ClearReasonsEnabled()) {
+            std::printf("Deferred clear resolve reasons:");
+            for (size_t i = 0; i < clear_reasons.size(); ++i) {
+                std::printf(" %s=%llu", clear_reason_names[i],
+                            (unsigned long long)clear_reasons[i].load(std::memory_order_relaxed));
+            }
+            std::printf("\n");
+        }
     }
 }
 
-void Runtime::ResolvePendingClear(VideoCore::Image* image) {
+void Runtime::ResolvePendingClear(VideoCore::Image* image, ClearResolveReason reason) {
     if (!image->pending_clear) {
         return;
     }
     image->pending_clear = false;
     clears_recorded.fetch_add(1, std::memory_order_relaxed);
+    if (ClearReasonsEnabled()) {
+        clear_reasons[static_cast<size_t>(reason)].fetch_add(1, std::memory_order_relaxed);
+    }
     RecordClear(image, image->pending_clear_range, image->pending_clear_value);
 }
 
@@ -792,7 +824,7 @@ void Runtime::SetBackingSamples(VideoCore::Image* image, u32 num_samples, bool c
     if (!backing || backing->num_samples == num_samples) {
         return;
     }
-    ResolvePendingClear(image); // into the backing it was meant for
+    ResolvePendingClear(image, ClearResolveReason::BackingSwap); // into the old backing
     ASSERT_MSG(!image->info.props.is_depth, "Swapping samples is only valid for color images");
     VideoCore::Image::BackingImage* new_backing;
     auto it = std::ranges::find(backing_images, num_samples,

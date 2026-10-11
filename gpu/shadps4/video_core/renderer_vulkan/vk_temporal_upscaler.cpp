@@ -969,7 +969,7 @@ void TemporalUpscaler::OnBlendedSceneDraw() {
         return;
     }
     scheduler.EndRendering();
-    runtime.ResolvePendingClear(&color); // bbport: the handle is used directly below
+    runtime.ResolvePendingClear(&color, Runtime::ClearResolveReason::Copy);
     vk::Image source = color.GetImage();
     vk::ImageLayout source_layout = vk::ImageLayout::eTransferSrcOptimal;
     if (reduced) {
@@ -1653,7 +1653,8 @@ void TemporalUpscaler::RunUiOnly(VideoCore::ImageId color_id, VideoCore::ImageId
     PrepareUiDepth(depth_id);
     // Copy only the background already drawn. The subsequent menu/HUD/text draws execute
     // directly at output resolution, including frames with no scene or camera at all.
-    runtime.ResolvePendingClear(&const_cast<VideoCore::Image&>(color)); // bbport: used directly
+    runtime.ResolvePendingClear(&const_cast<VideoCore::Image&>(color),
+                                Runtime::ClearResolveReason::Copy);
     vk::Image source = color.GetImage();
     auto source_layout = vk::ImageLayout::eTransferSrcOptimal;
     u32 source_width = color.info.size.width, source_height = color.info.size.height;
@@ -1735,8 +1736,8 @@ void TemporalUpscaler::RunScaled() {
     PrepareUiDepth(camera_motion.Depth());
     const auto depth_format = depth.info.pixel_format;
     // Views kept across frames: FSR 4 registers images by view in a registry of eight.
-    runtime.ResolvePendingClear(&depth); // bbport: the handles are used directly below
-    runtime.ResolvePendingClear(&color);
+    runtime.ResolvePendingClear(&depth, Runtime::ClearResolveReason::Copy);
+    runtime.ResolvePendingClear(&color, Runtime::ClearResolveReason::Copy);
     vk::Image depth_image = depth.GetImage(), color_image = color.GetImage();
     vk::ImageView depth_view{}, color_view{};
     u32 source_width = iw, source_height = ih;

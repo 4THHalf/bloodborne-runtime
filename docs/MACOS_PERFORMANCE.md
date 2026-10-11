@@ -40,9 +40,30 @@ fell from 17.8/16.8 to 14.7/13.6 per frame. The trace's idle inside command buff
 5.0/4.7 ms off and 4.7/4.3 ms on. Idle between command buffers varied from 0.8 to 3.7 ms
 across these traces, so the FPS and frame times are better measures of the net effect.
 
+The original implementation recorded about 70% of pending clears on their own in a diagnostic
+run. `BB_DEFER_CLEAR_REASONS=1` showed that a broad check for an enabled upscaler accounted for
+7,399 of 12,908 separate clears at the first 16,384 clears. Checking whether the color target
+was actually redirected raised load-action clears from 3,469 to 10,815 and reduced separate
+clears from 12,908 to 5,564. The remaining resolves were 3,761 shader reads and 1,803 copies;
+both require the clear to be recorded before access. Other reason buckets were zero in this
+clinic run.
+
+Three alternating off/on pairs without tracing, each with a 90-second hold, measured:
+
+| Pair | Off FPS / p90 / game CPU | On FPS / p90 / game CPU |
+|---|---|---|
+| 1 | 46.7 / 22.4 ms / 494% | 47.8 / 21.9 ms / 505% |
+| 2 | 46.4 / 22.6 ms / 496% | 47.5 / 22.1 ms / 498% |
+| 3 | 47.2 / 22.2 ms / 498% | 49.1 / 21.2 ms / 503% |
+
+On improved FPS and p90 in each pair. Game CPU use averaged 502% on versus 496% off; this
+small increase should be checked again if later renderer changes affect CPU cost. Game-frame
+captures from the same place showed no visible difference. The default remains on, and
+`BB_DEFER_CLEARS=0` disables it.
+
 | Change | Effect |
 |---|---|
-| Color clears deferred to the next render pass's load action (`BB_DEFER_CLEARS`) | 44.6–46.7 → 47.3–47.9 FPS in two alternating pairs; 3–4 fewer clear encoders per frame |
+| Color clears deferred to the next render pass's load action (`BB_DEFER_CLEARS`) | After narrowing the upscaler check: 46.4–47.2 → 47.5–49.1 FPS in three untraced pairs; 3–4 fewer clear encoders per frame before this refinement |
 | GPU memory kept resident in a Metal residency set (`gpu/shim/bbport_metal_residency.*`) | 9–14 FPS with 400–650 ms hitches → 16.8 FPS steady (Rosetta build) |
 | No SPIR-V `NoContraction`: SPIRV-Cross turned it into unoptimizable `[[clang::optnone]]` add/multiply helpers in every shader | 16.7 → 30.4 FPS |
 | Copy-shader copies recorded before the render pass instead of splitting it (`BB_HOIST_COPIES`), batched | ~1–2 ms |
@@ -86,8 +107,8 @@ Utilization" overstates how busy the GPU is; use Metal System Traces (`TRACE=1` 
      restart each on MoltenVK: ~2–3 ms (removing them entirely: 31 → 34 FPS). Their hull shader
      uses constant factors (outer 3, inner 1), so they could be pre-tessellated into ordinary
      triangles (merging the LS, HS and DS stages in the recompiler).
-   - Deferred color clears remove 3–4 separate clear encoders a frame in the clinic. The
-     remaining clears (~14 a frame there) need a closer look before extending the rule.
+   - Deferred color clears initially removed 3–4 separate clear encoders a frame in the clinic.
+     The narrowed upscaler check removes more, but encoder counts have not been retraced.
    - Small buffer copies between passes (~1–1.5 ms): batch further.
 2. **Vertex work, ~6 ms a frame at native.** Vertex shaders read constants from storage buffers
    one value at a time; uniformly indexed read-only buffers declared as constant buffers might

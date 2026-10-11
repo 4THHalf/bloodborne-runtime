@@ -4223,14 +4223,28 @@ RenderState Rasterizer::BeginRenderingFull(const GraphicsPipeline* pipeline) {
         const auto& col_buf = regs.color_buffers[cb];
         const bool is_clear = texture_cache.IsMetaCleared(col_buf.CmaskAddress(), slice);
         texture_cache.TouchMeta(col_buf.CmaskAddress(), slice, false);
+        // Enabled() covers every color target while the upscaler is active. Only a target that
+        // RedirectColor actually replaces must forgo the native image's clear load action.
+        if (cb == 0 && upscaler->Enabled()) {
+            color_redirected = upscaler->RedirectColor(image_id, desc.view_info, redirect);
+        }
 
         // bbport BB_DEFER_CLEARS: a deferred clear of exactly this view becomes the pass's load
         // action (the pass's final size is checked below); otherwise it is recorded now.
         vk::ClearColorValue taken_clear{};
         const bool takes_clear = image->pending_clear && !reduced && !image->binding.is_bound &&
-                                 !is_clear && !(cb == 0 && upscaler->Enabled()) &&
+                                 !is_clear && !(cb == 0 && color_redirected) &&
                                  runtime.TakePendingClear(image, image_view.info.range, taken_clear);
-        runtime.ResolvePendingClear(image);
+        if (image->pending_clear) {
+            using Reason = Runtime::ClearResolveReason;
+            const auto& range = image->pending_clear_range;
+            const auto reason = reduced ? Reason::ReducedPass
+                : cb == 0 && color_redirected ? Reason::UpscalerRedirect
+                : range.extent.levels != 1 || range.extent.layers != 1
+                    ? Reason::MultiLevelOrLayer
+                : range != image_view.info.range ? Reason::ViewRange : Reason::Other;
+            runtime.ResolvePendingClear(image, reason);
+        }
 
         if (reduced) {
             // The native image is resolved lazily when a shader/copy actually reads it.
@@ -4278,14 +4292,11 @@ RenderState Rasterizer::BeginRenderingFull(const GraphicsPipeline* pipeline) {
             attachment.image_layout = target.layout;
         }
         image->usage.render_target = 1u;
-        if (cb == 0 && upscaler->Enabled()) {
-            color_redirected = upscaler->RedirectColor(image_id, desc.view_info, redirect);
-            if (color_redirected) {
-                guest_extent = {image->info.size.width, image->info.size.height};
-                original_color = {attachment.image_view, attachment.image_layout};
-                attachment.image_view = redirect.view;
-                attachment.image_layout = redirect.layout;
-            }
+        if (cb == 0 && color_redirected) {
+            guest_extent = {image->info.size.width, image->info.size.height};
+            original_color = {attachment.image_view, attachment.image_layout};
+            attachment.image_view = redirect.view;
+            attachment.image_layout = redirect.layout;
         }
     }
     for (u32 cb = state.num_color_attachments; cb < state.color_attachments.size(); ++cb) {
@@ -4452,7 +4463,7 @@ RenderState Rasterizer::BeginRenderingFull(const GraphicsPipeline* pipeline) {
             continue;
         }
         image.pending_clear = true;
-        runtime.ResolvePendingClear(&image);
+        runtime.ResolvePendingClear(&image, Runtime::ClearResolveReason::SmallRenderArea);
         runtime.Transit(&image, vk::ImageLayout::eColorAttachmentOptimal,
                         vk::PipelineStageFlagBits2::eColorAttachmentOutput,
                         vk::AccessFlagBits2::eColorAttachmentWrite |

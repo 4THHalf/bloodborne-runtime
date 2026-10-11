@@ -98,7 +98,13 @@ public:
     /// anything else that uses the image records it first (ResolvePendingClear, from Transit).
     /// A clear between passes is a render pass of its own on tile-based GPUs.
     static bool DeferClears();
-    void ResolvePendingClear(VideoCore::Image* image);
+    enum class ClearResolveReason : u8 {
+        Copy, Sample, OtherAccess, ReducedPass, UpscalerRedirect, ViewRange,
+        SmallRenderArea, MultiLevelOrLayer, BackingSwap, Superseded, Other,
+        Count,
+    };
+    void ResolvePendingClear(VideoCore::Image* image,
+                             ClearResolveReason reason = ClearResolveReason::Other);
     bool TakePendingClear(VideoCore::Image* image, const VideoCore::SubresourceRange& range,
                           vk::ClearColorValue& value);
 

@@ -76,8 +76,8 @@ GPU's idle time and in what each pass costs.
 ## Progress roadmap
 
 Each bar has 20 blocks, one per 5%. The percentages track completed deliverables in each step,
-not a prediction of remaining development time. N1 has four deliverables; only deferred clears
-have passed visual and alternating trace checks. The fixed quad coordinate mesh is implemented
+not a prediction of remaining development time. N1 has four deliverables; deferred clears
+have passed visual, traced, and three-pair untraced checks. The fixed quad coordinate mesh is implemented
 and checked in isolation, but the triangle draw path is not complete, so it does not advance N1.
 
 | Step | Progress | Next deliverable |
@@ -120,12 +120,25 @@ N1 to N3 also make today's renderer faster on every platform; N4 and N5 remove M
 
 The first N1 change defers color clears until their next use. A pass that draws over the full
 cleared image uses a clear load action; other uses record the clear before accessing the image.
-It is on by default, with `BB_DEFER_CLEARS=0` as the off switch. Four alternating traced runs in
-the clinic (off/on/off/on, same save and position) measured 46.7/47.3/44.6/47.9 FPS during the
-level hold. Separate color-clear encoders fell from 17.8/16.8 to 14.7/13.6 per frame. Idle
-inside command buffers was 5.0/4.7 ms off and 4.7/4.3 ms on. The on traces had variable idle
-between command buffers (1.6 and 3.7 ms, against 0.8 and 1.3 ms off); their total GPU time is
-not a stable estimate of this change. Game-generated frames at the same position looked alike.
+It is on by default, with `BB_DEFER_CLEARS=0` as the off switch. The first four alternating
+traced runs in the clinic (off/on/off/on) measured 46.7/47.3/44.6/47.9 FPS. Separate color-clear
+encoders fell from 17.8/16.8 to 14.7/13.6 per frame. The on traces had variable idle between
+command buffers (1.6 and 3.7 ms, against 0.8 and 1.3 ms off), so an untraced check was needed.
+
+`BB_DEFER_CLEAR_REASONS=1` counts why a pending clear was recorded. At 16,384 clears, the first
+diagnostic run took 3,469 as load actions and recorded 12,908. Of those, 7,399 were blocked by
+the upscaler's broad enabled check, 3,752 by image access and 1,757 by copies. Testing the actual
+color redirect instead raised taken clears to 10,815 and reduced separate clears to 5,564 at the
+same count. The remaining reasons were 3,761 shader reads and 1,803 copies; those uses need the
+clear recorded first. View, render-area, multi-level/layer, reduced-pass and backing-swap reasons
+were zero in this scene. The separate-clear counter is sampled while a few clears remain pending.
+
+Six alternating runs without Metal tracing, with 90-second level holds, measured 46.7/47.8,
+46.4/47.5 and 47.2/49.1 FPS (off/on pairs). Frame-time p90 was 22.4/21.9, 22.6/22.1 and
+22.2/21.2 ms. Game CPU use was 494/505, 496/498 and 498/503% (100% is one core). On improved
+FPS and p90 in each pair, while CPU use averaged about six percentage points higher. Game-frame
+captures at the same position showed no visible difference. Deferred clears remain enabled by
+default; the CPU difference warrants watching in later tests.
 The tessellated light draws are the next N1 target. The observed shaders use one control point,
 pass its attributes through the hull stage, and use fixed integer quad factors (outer 3, inner
 1, or all 1). A triangle path must preserve the domain shader's coordinates, winding and

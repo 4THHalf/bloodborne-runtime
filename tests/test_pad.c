@@ -12,6 +12,11 @@ uintptr_t runtime_lookup(const RuntimeExport *table, size_t count, const char *n
     (void)table; (void)count; (void)name;
     return 0;
 }
+uint64_t runtime_guest_call(const void *fn, int count, const uint64_t *args) {
+    (void)fn; (void)count; (void)args;
+    assert(!"pad test unexpectedly called a guest function");
+    return 0;
+}
 
 static void inject(const char *path, const char *tokens) {
     FILE *f=fopen(path,"w");

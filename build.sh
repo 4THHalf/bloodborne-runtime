@@ -147,6 +147,8 @@ echo "Built $PWD/out/bb-probe"
 # GPU check for run.sh (live_resolution=auto) and the launcher's gamepad list (--gamepads).
 "$CC" "${arch[@]}" -std=c11 -O2 -Wall -Wextra -Werror "${includes[@]}" tools/gpu_capabilities.c "${libraries[@]}" -o out/bb-gpu-capabilities
 if [[ ${1:-} == --test ]]; then
+    ninja -C "$gpudir" fixed-quad-tessellation-test >/dev/null
+    "$gpudir/fixed-quad-tessellation-test"
     "$CC" "${arch[@]}" -std=c11 -O2 -g -Wall -Wextra -Werror -pthread "${includes[@]}" -I. -Isrc -Irecomp/src tests/test_pad.c src/platform.c "${libraries[@]}" -o out/pad-test
     out/pad-test
     "$CC" "${arch[@]}" -std=c11 -O2 -g -Wall -Wextra -Werror "${warnings[@]}" -pthread "${includes[@]}" -I. -Isrc -Irecomp/src tests/test_runtime.c "${runtime[@]}" "$atrac9_lib" "${cpu[@]}" -lm "${gpu[@]}" "${libraries[@]}" -o out/runtime-test
