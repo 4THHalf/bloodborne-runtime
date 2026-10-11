@@ -349,7 +349,8 @@ void SetupCapabilities(const Info& info, const Profile& profile, const RuntimeIn
             ctx.AddCapability(spv::Capability::StencilExportEXT);
         }
     }
-    if (stage == SwStage::TessellationControl || stage == SwStage::TessellationEval) {
+    if (stage == SwStage::TessellationControl ||
+        (stage == SwStage::TessellationEval && !runtime_info.fixed_quad_vertex)) {
         ctx.AddCapability(spv::Capability::Tessellation);
     }
     if (stage == SwStage::Vertex || stage == SwStage::TessellationControl ||
@@ -409,6 +410,10 @@ void DefineEntryPoint(const Info& info, EmitContext& ctx, Id main) {
                              ctx.runtime_info.sw.tcs.NumOutputControlPoints());
         break;
     case SwStage::TessellationEval: {
+        if (ctx.runtime_info.fixed_quad_vertex) {
+            execution_model = spv::ExecutionModel::Vertex;
+            break;
+        }
         execution_model = spv::ExecutionModel::TessellationEvaluation;
         ctx.AddExecutionMode(main, ExecutionMode(ctx.runtime_info.sw.tes.tess_type));
         ctx.AddExecutionMode(main, ExecutionMode(ctx.runtime_info.sw.tes.tess_partitioning));

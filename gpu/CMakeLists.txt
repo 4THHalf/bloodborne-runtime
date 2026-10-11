@@ -190,6 +190,9 @@ if (NOT APPLE)
 endif()
 
 # Explicit test targets; neither launches the game nor needs a Vulkan device.
+add_executable(fixed-quad-tessellation-test EXCLUDE_FROM_ALL ../tests/test_fixed_quad_tessellation.cpp)
+target_compile_options(fixed-quad-tessellation-test PRIVATE -UNDEBUG -Wall -Wextra -Werror)
+target_include_directories(fixed-quad-tessellation-test PRIVATE shadps4)
 add_executable(motion-history-test EXCLUDE_FROM_ALL ../tests/test_motion_history.cpp)
 target_compile_options(motion-history-test PRIVATE -UNDEBUG -Wall -Wextra -Werror)
 target_include_directories(motion-history-test PRIVATE ..)

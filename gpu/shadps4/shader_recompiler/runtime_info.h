@@ -264,6 +264,10 @@ struct HwComputeRuntimeInfo {
 struct RuntimeInfo {
     SwStage sw_stage;
     HwStage hw_stage;
+    // Emit a domain shader as a vertex shader for a fixed, one-control-point quad patch.
+    // Its per-patch attributes and tessellation coordinates become vertex inputs.
+    bool fixed_quad_vertex;
+    u32 fixed_quad_vertex_count;
     struct Properties {
         AmdGpu::FpDenormMode fp_denorm_mode32;
         AmdGpu::FpDenormMode fp_denorm_mode16_64;
@@ -298,7 +302,9 @@ struct RuntimeInfo {
     }
 
     bool operator==(const RuntimeInfo& other) const noexcept {
-        return hw_stage == other.hw_stage && sw_stage == other.sw_stage && props == other.props &&
+        return hw_stage == other.hw_stage && sw_stage == other.sw_stage &&
+               fixed_quad_vertex == other.fixed_quad_vertex &&
+               fixed_quad_vertex_count == other.fixed_quad_vertex_count && props == other.props &&
                HasSameSwInfo(other.sw) && HasSameHwInfo(other.hw);
     }
 

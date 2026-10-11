@@ -79,6 +79,9 @@ struct InfoPersistent {
     bool has_fetch_shader{};
     bool has_bitwise_xor{};
     bool uses_dma{};
+    // 1 or 3 for a passthrough one-control-point quad hull shader with constant factors;
+    // zero means the ordinary tessellation path is required.
+    u8 fixed_quad_outer{};
 
     InfoPersistent() = default;
     InfoPersistent(HwStage hw_stage_, SwStage sw_stage_, u64 pgm_hash_)

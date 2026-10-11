@@ -73,6 +73,37 @@ GPU's idle time and in what each pass costs.
   later. Unleashed Recompiled's render layer (plume, MIT, with Vulkan, D3D12 and Metal backends)
   is to be evaluated before writing our own interface.
 
+## Progress roadmap
+
+Each bar has 20 blocks, one per 5%. The percentages track completed deliverables in each step,
+not a prediction of remaining development time. N1 has four deliverables; only deferred clears
+have passed visual and alternating trace checks. The fixed quad coordinate mesh is implemented
+and checked in isolation, but the triangle draw path is not complete, so it does not advance N1.
+
+| Step | Progress | Next deliverable |
+|---|---|---|
+| N0 · scope | 100% `████████████████████` | Complete |
+| N1 · frame planning | 25% `█████░░░░░░░░░░░░░░░` | Fixed tessellation as triangles |
+| N2 · shaders ahead of time | 0% `░░░░░░░░░░░░░░░░░░░░` | Inventory shader variants |
+| N3 · textures as objects | 0% `░░░░░░░░░░░░░░░░░░░░` | Trace texture creation sites |
+| N4 · backend interface | 0% `░░░░░░░░░░░░░░░░░░░░` | Define shared resource and command interfaces |
+| N5 · Metal backend | 0% `░░░░░░░░░░░░░░░░░░░░` | Implement the interface after N4 |
+| N6 · engine render boundary | 0% `░░░░░░░░░░░░░░░░░░░░` | Map engine calls after R4 |
+
+N1 acceptance gates:
+
+1. **Done:** defer eligible color clears to render-pass load actions; compare frames and Metal
+   traces with the old path.
+2. **Next:** replace only eligible fixed, one-control-point quad tessellation with ordinary
+   triangles. Detect the factor pattern from the hull shader, carry local-shader attributes and
+   domain-shader resources into a vertex shader, expand indexed patches, and compare the image
+   and trace against tessellation. Keep the old path for every unmatched shader and as an off
+   switch.
+3. **Then:** move or defer copies that still break render passes; keep dependency checks for
+   source and destination ranges. Simple grouping by buffer pair showed no gain.
+4. **Finish:** repeat alternating game runs on both backends where available, make each proven
+   path the default, and keep rollback switches.
+
 ## Steps
 
 | | Step | Platforms | Status |
@@ -99,7 +130,17 @@ The tessellated light draws are the next N1 target. The observed shaders use one
 pass its attributes through the hull stage, and use fixed integer quad factors (outer 3, inner
 1, or all 1). A triangle path must preserve the domain shader's coordinates, winding and
 resources while moving its work into a vertex stage. This needs a shader-stage rewrite; changing
-only the draw topology would change the image.
+only the draw topology would change the image. The [Vulkan tessellation rules](https://docs.vulkan.org/spec/latest/chapters/tessellation.html)
+allow implementation-dependent triangle connections; visual comparison is required for the
+prebuilt mesh.
+
+The shader recompiler now recognizes the two fixed hull factor variants by their operations,
+stores the result in shader metadata, and can emit the three observed domain shader variants as
+vertex SPIR-V modules for diagnosis (`BB_FIXED_QUAD_PROBE=1`). All three modules passed
+`spirv-val` for Vulkan 1.3. A shared quad mesh supplies the coordinates for both factor pairs,
+with a test for triangle count, winding and covered area. The renderer does not select these
+modules yet: local-shader output attributes must be carried into the vertex inputs and indexed
+patches must be expanded before a visual or performance comparison is valid.
 
 The existing copy hoist already batches copies before a pass. Grouping its non-overlapping
 regions by source and destination buffer was tested but not retained. In three usable Metal

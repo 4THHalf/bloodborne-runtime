@@ -1144,7 +1144,27 @@ vk::ShaderModule PipelineCache::CompileModule(Shader::Info& info, Shader::Runtim
     CompileTimer timer;
 
     const auto ir_program = Shader::TranslateProgram(code, pools, info, runtime_info, profile);
+    const auto binding_before_emit = binding;
     auto spv = Shader::Backend::SPIRV::EmitSPIRV(profile, runtime_info, ir_program, binding);
+    static const bool fixed_quad_probe = std::getenv("BB_FIXED_QUAD_PROBE") != nullptr;
+    if (fixed_quad_probe && info.sw_stage == SwStage::TessellationControl) {
+        std::printf("Fixed quad hull eligibility: outer %u\n", info.fixed_quad_outer);
+    }
+    if (fixed_quad_probe && info.sw_stage == SwStage::TessellationEval &&
+        runtime_info.sw.tes.tess_type == AmdGpu::TessellationType::Quad &&
+        info.uses_patches == 0) {
+        auto vertex_info = runtime_info;
+        vertex_info.fixed_quad_vertex = true;
+        vertex_info.fixed_quad_vertex_count = 36;
+        auto probe_binding = binding_before_emit;
+        auto vertex_spv =
+            Shader::Backend::SPIRV::EmitSPIRV(profile, vertex_info, ir_program, probe_binding);
+        DumpShader(vertex_spv, info.pgm_hash, info.hw_stage, perm_idx, "fixed-vertex.spv");
+        const auto probe_module = CompileSPV(vertex_spv, instance.GetDevice());
+        instance.GetDevice().destroyShaderModule(probe_module);
+        std::printf("Fixed quad vertex module: %zu words, %u patch inputs\n", vertex_spv.size(),
+                    std::popcount(info.uses_patches));
+    }
     DumpShader(spv, info.pgm_hash, info.hw_stage, perm_idx, "spv");
 
     vk::ShaderModule module;

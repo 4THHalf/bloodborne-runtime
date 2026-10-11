@@ -2,6 +2,9 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "common/logging/classes.h"
+#include <array>
+#include <ranges>
+#include <span>
 #include "shader_recompiler/frontend/control_flow_graph.h"
 #include "shader_recompiler/frontend/decode.h"
 #include "shader_recompiler/frontend/structured_control_flow.h"
@@ -13,6 +16,46 @@
 #include "shader_recompiler/recompiler.h"
 
 namespace Shader {
+
+// A deliberately narrow gate for replacing quad tessellation with triangles. The domain
+// shader and the vertex input layout are checked separately when selecting the fast path.
+static u8 FixedQuadOuter(const IR::Program& program, const RuntimeInfo& runtime_info) {
+    if (program.info.sw_stage != SwStage::TessellationControl ||
+        runtime_info.sw.tcs.tess_type != AmdGpu::TessellationType::Quad ||
+        runtime_info.sw.tcs.num_input_control_points != 1 ||
+        !runtime_info.sw.tcs.IsPassthrough() || program.blocks.size() != 2 ||
+        program.blocks.back()->Instructions().size() != 1 ||
+        program.blocks.back()->Instructions().front().GetOpcode() != IR::Opcode::Epilogue) {
+        return 0;
+    }
+    constexpr std::array factors{
+        IR::Patch::TessellationLodLeft, IR::Patch::TessellationLodTop,
+        IR::Patch::TessellationLodRight, IR::Patch::TessellationLodBottom,
+        IR::Patch::TessellationLodInteriorU, IR::Patch::TessellationLodInteriorV,
+    };
+    std::array<float, factors.size()> values{};
+    std::array<bool, factors.size()> seen{};
+    for (const IR::Inst& inst : program.blocks.front()->Instructions()) {
+        if (inst.GetOpcode() != IR::Opcode::SetPatch) continue;
+        const auto patch = inst.Arg(0).Patch();
+        const auto it = std::ranges::find(factors, patch);
+        if (it == factors.end()) continue;
+        const size_t index = std::distance(factors.begin(), it);
+        const auto value = inst.Arg(1);
+        if (seen[index] || value.Type() != IR::Type::F32) return 0;
+        seen[index] = true;
+        values[index] = value.F32();
+    }
+    if (!std::ranges::all_of(seen, [](bool value) { return value; })) return 0;
+    if (values[4] != 1.f || values[5] != 1.f) return 0;
+    for (u8 outer : {u8{1}, u8{3}}) {
+        if (std::ranges::all_of(std::span{values}.first(4),
+                                [outer](float value) { return value == outer; })) {
+            return outer;
+        }
+    }
+    return 0;
+}
 
 IR::BlockList GenerateBlocks(const IR::AbstractSyntaxList& syntax_list) {
     size_t num_syntax_blocks{};
@@ -144,6 +187,7 @@ IR::Program TranslateProgram(const std::span<const u32>& code, Pools& pools, Inf
         Shader::Optimization::InterpolatedIntegerPass(program);
     }
     Shader::Optimization::CollectShaderInfoPass(program, profile);
+    info.fixed_quad_outer = FixedQuadOuter(program, runtime_info);
     Shader::IR::DumpProgram(program, info);
 
     return program;

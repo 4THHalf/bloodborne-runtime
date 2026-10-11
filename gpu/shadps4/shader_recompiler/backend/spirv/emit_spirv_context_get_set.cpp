@@ -243,6 +243,10 @@ Id EmitGetAttributeU32(EmitContext& ctx, IR::Attribute attr, u32 comp) {
     case IR::Attribute::RenderTargetIndex:
         return ctx.OpLoad(ctx.U32[1], ctx.output_layer);
     case IR::Attribute::PrimitiveId:
+        if (ctx.runtime_info.fixed_quad_vertex) {
+            return ctx.OpUDiv(ctx.U32[1], ctx.OpLoad(ctx.U32[1], ctx.vertex_index),
+                              ctx.ConstU32(ctx.runtime_info.fixed_quad_vertex_count));
+        }
         return ctx.OpLoad(ctx.U32[1], ctx.primitive_id);
     case IR::Attribute::InvocationId:
         ASSERT(ctx.info.sw_stage == SwStage::Geometry ||
@@ -346,6 +350,10 @@ void EmitSetAttribute(EmitContext& ctx, IR::Attribute attr, Id value, u32 elemen
 
 Id EmitGetTessGenericAttribute(EmitContext& ctx, Id vertex_index, Id attr_index, Id comp_index) {
     const auto attr_comp_ptr = ctx.TypePointer(spv::StorageClass::Input, ctx.F32[1]);
+    if (ctx.runtime_info.fixed_quad_vertex) {
+        return ctx.OpLoad(ctx.F32[1], ctx.OpAccessChain(attr_comp_ptr, ctx.input_attr_array,
+                                                        attr_index, comp_index));
+    }
     return ctx.OpLoad(ctx.F32[1], ctx.OpAccessChain(attr_comp_ptr, ctx.input_attr_array,
                                                     vertex_index, attr_index, comp_index));
 }

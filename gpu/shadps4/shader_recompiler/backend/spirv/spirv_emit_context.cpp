@@ -562,10 +562,21 @@ void EmitContext::DefineInputs() {
         break;
     }
     case SwStage::TessellationEval: {
+        const u32 num_attrs = Common::AlignUp(runtime_info.sw.tes.hs_output_cp_stride, 16) >> 4;
+        if (runtime_info.fixed_quad_vertex) {
+            vertex_index =
+                DefineVariable(U32[1], spv::BuiltIn::VertexIndex, spv::StorageClass::Input);
+            tess_coord = DefineInput(F32[2], num_attrs);
+            Name(tess_coord, "fixed_quad_coord");
+            if (num_attrs > 0) {
+                input_attr_array = DefineInput(TypeArray(F32[4], ConstU32(num_attrs)), 0);
+                Name(input_attr_array, "fixed_quad_attrs");
+            }
+            break;
+        }
         tess_coord = DefineInput(F32[3], std::nullopt, spv::BuiltIn::TessCoord);
         primitive_id = DefineVariable(U32[1], spv::BuiltIn::PrimitiveId, spv::StorageClass::Input);
 
-        const u32 num_attrs = Common::AlignUp(runtime_info.sw.tes.hs_output_cp_stride, 16) >> 4;
         if (num_attrs > 0) {
             const Id per_vertex_type{TypeArray(F32[4], ConstU32(num_attrs))};
             // The input vertex count isn't statically known, so make length 32 (what
