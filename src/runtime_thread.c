@@ -108,6 +108,8 @@ void runtime_thread_attach_main(void) {
     GuestThread *t=runtime_thread_current();
     snprintf(t->name,sizeof(t->name),"main");
 }
+/* The guest name of this thread ("" before it ran guest code). */
+const char *runtime_thread_name(void) { return current ? current->name : ""; }
 static GuestThread *find_thread(void *handle) {
     GuestThread *found=NULL;
     pthread_mutex_lock(&lock);
@@ -266,7 +268,7 @@ static int32_t create(GuestThread **out,ThreadAttr **attr_slot,GuestEntry entry,
     if (e) { fprintf(stderr,"STOP: host pthread_create failed: %d\n",e); exit(21); }
     if (t->detached) pthread_detach(t->host);
     pthread_mutex_lock(&lock); ++created; pthread_mutex_unlock(&lock);
-    printf("Runtime: guest thread '%s' created (stack=%llu, prio=%d)\n",t->name,(unsigned long long)stack,t->attr.prio);
+    printf("Runtime: guest thread '%s' created (stack=%llu, prio=%d, cpus=%#llx)\n",t->name,(unsigned long long)stack,t->attr.prio,(unsigned long long)t->attr.affinity);
     return 0;
 }
 static ABI int32_t thread_create(GuestThread **out,ThreadAttr **attr,GuestEntry entry,void *argument,const char *name) {
@@ -310,6 +312,8 @@ static ABI int32_t thread_set_prio(GuestThread *t,int prio) {
 }
 static ABI int32_t thread_set_affinity(GuestThread *t,uint64_t mask) {
     if (!find_thread(t)) return ERR(3);
+    /* Recorded, not applied (macOS cannot pin threads); logged: which threads share a core. */
+    if (mask!=t->attr.affinity) printf("Runtime: guest thread '%s' cpus=%#llx\n",t->name,(unsigned long long)mask);
     t->attr.affinity=mask; return 0;
 }
 static ABI int32_t thread_get_affinity(GuestThread *t,uint64_t *mask) {
@@ -372,5 +376,6 @@ void runtime_thread_report(void) {
 uintptr_t runtime_thread_resolve(const char *name) { (void)name; return 0; }
 void runtime_thread_report(void) {}
 void runtime_thread_attach_main(void) {}
+const char *runtime_thread_name(void) { return ""; }
 void runtime_set_main_tls(const void *d,uint64_t f,uint64_t m,uint64_t a) { (void)d;(void)f;(void)m;(void)a; }
 #endif

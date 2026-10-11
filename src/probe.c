@@ -636,6 +636,8 @@ int main(int argc, char **argv) {
         puts("CPU: guest code runs through bbcpu (BB_CPU=interp)");
         /* Recompiled functions: checked against the code as patched above. */
         bbcpu_recomp_load(bb_image_base);
+        /* Command buffer guards and probes: checked against the mapped code. */
+        runtime_cmdbuf_load(bb_image_base);
     }
 #endif
     game.native_libc=native_libc; game.ns=ns; game.nb=nb; game.procparam=procparam; game.entry=entry;

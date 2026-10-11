@@ -52,6 +52,7 @@ uintptr_t runtime_thread_resolve(const char *name);
 void runtime_thread_report(void);
 void runtime_set_main_tls(const void *data, uint64_t filesz, uint64_t memsz, uint64_t align);
 void runtime_thread_attach_main(void);
+const char *runtime_thread_name(void);
 int32_t *runtime_errno(void);
 uintptr_t runtime_sema_resolve(const char *name);
 void runtime_sema_report(void);
@@ -87,6 +88,8 @@ int32_t runtime_guest_errno(int host_errno);
 void *runtime_low_map(size_t size, int prot);
 /* BB_NATIVE_LIB: native versions of game functions replace the game's (runtime_native.c). */
 void runtime_native_load(uint64_t image_base);
+/* The game's command buffers: one writer at a time, BB_CB_PROBE=1 reports (runtime_cmdbuf.c). */
+void runtime_cmdbuf_load(uint64_t image_base);
 uintptr_t runtime_ajm_resolve(const char *name);
 void runtime_ajm_report(void);
 uintptr_t runtime_audio_resolve(const char *name);
