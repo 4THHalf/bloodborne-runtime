@@ -46,6 +46,11 @@ an area loads; `src/runtime_cmdbuf.c` holds a per-buffer lock across the game's 
 methods (bbcpu guards; `BB_CB_GUARD=0`: off). `BB_CB_PROBE=1` reports any buffer two threads use at
 once, with their names and callers: the first thing to run on a "PM4 type 0" or "Bad PM4 packet".
 
+## Native renderer
+
+`docs/NATIVE_RENDERER.md`: milestone R5, the engine's graphics on each platform's own API (steps
+N0–N6, N0 done). Multiplatform: shared core, Vulkan and Metal backends; nothing Metal-only.
+
 ## Rendering bugs
 
 Bisect bbport's optimizations first: `BB_TOGGLE_FILE` holds a mask of switches (bits 0–19, 30,

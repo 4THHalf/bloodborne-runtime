@@ -58,7 +58,9 @@ game's functions out as C, compiled into a native library the game loads.
    running in the translator.
 
 Only the recompiler and its tools are published, never the game's code.
-The goal is a native port: the engine's graphics drawing with Metal directly. Progress:
+The goal is a native port: the game's code compiled ahead of time, and the engine's graphics
+drawn with each platform's own GPU API ([native renderer](../NATIVE_RENDERER.md): Vulkan on
+Windows and Linux, Metal on macOS). Progress:
 [Recompilation status](https://github.com/bloodborne-native/bloodborne-recomp/wiki/Recompilation-status).
 
 ## Where it comes from
