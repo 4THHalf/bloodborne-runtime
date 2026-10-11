@@ -95,7 +95,18 @@ level hold. Separate color-clear encoders fell from 17.8/16.8 to 14.7/13.6 per f
 inside command buffers was 5.0/4.7 ms off and 4.7/4.3 ms on. The on traces had variable idle
 between command buffers (1.6 and 3.7 ms, against 0.8 and 1.3 ms off); their total GPU time is
 not a stable estimate of this change. Game-generated frames at the same position looked alike.
-The next N1 items are the tessellated light draws and buffer-copy batching.
+The tessellated light draws are the next N1 target. The observed shaders use one control point,
+pass its attributes through the hull stage, and use fixed integer quad factors (outer 3, inner
+1, or all 1). A triangle path must preserve the domain shader's coordinates, winding and
+resources while moving its work into a vertex stage. This needs a shader-stage rewrite; changing
+only the draw topology would change the image.
+
+The existing copy hoist already batches copies before a pass. Grouping its non-overlapping
+regions by source and destination buffer was tested but not retained. In three usable Metal
+traces, `vkCmdCopyBuffer` encoders were 59.4 and 54.8 per frame without grouping, and 54.5 with
+it; the runs varied more than the apparent reduction. The level holds were 46.7 and 48.6 FPS
+without grouping, and 46.3 and 47.7 FPS with it (the latter trace failed). Further copy work
+needs to reduce render-pass breaks or measured idle, not just command calls.
 
 N3 hooks the engine's own functions. With the recompiled library loaded, recompiled functions call
 each other directly and skip hooks, so the recompiler first has to send calls to hooked functions

@@ -59,6 +59,9 @@ across these traces, so the FPS and frame times are better measures of the net e
 - Skipping draws that render into nothing (~13 a frame).
 - Rect lists as triangles (`BB_RECTS_AS_TRIANGLES`): the game's heavy tessellated draws are real
   tessellation, not rect lists.
+- Grouping already hoisted copy regions by buffer pair: 59.4/54.8 `vkCmdCopyBuffer` encoders per
+  frame in two off traces versus 54.5 in one on trace. The off runs spanned the apparent gain;
+  level-hold FPS was 46.7/48.6 off and 46.3/47.7 on. The grouping was reverted.
 - Motion vectors: a smaller target (RGBA16F), no history stores, gating still objects. The cost
   is the motion variant's vertex outputs: a variant without them (`BB_MOTION_LITE=1`,
   measurement) runs as fast as no motion vectors.
