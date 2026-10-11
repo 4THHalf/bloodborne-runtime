@@ -8,21 +8,21 @@ upscaling (FSR 3.1, FSR 4, FSR 4.1.1).
 It is **built on [bbport](https://github.com/deadinside28/bloodborne_pc) by deadinside28**, the
 native Linux port this work started from as a fork, whose releases keep being merged here (now 0.5)
 with their history. On Apple Silicon the game's code runs through bbcpu, the CPU layer of
-[bloodborne-recomp](https://github.com/PabloVSouza/bloodborne-recomp) (the `recomp/` submodule),
+[bloodborne-recomp](https://github.com/bloodborne-native/bloodborne-recomp) (the `recomp/` submodule),
 or as recompiled native code it generates.
 
 | Repository | |
 |---|---|
-| [bloodborne-recomp](https://github.com/PabloVSouza/bloodborne-recomp) | The recompiler and bbcpu: portable |
+| [bloodborne-recomp](https://github.com/bloodborne-native/bloodborne-recomp) | The recompiler and bbcpu: portable |
 | **bloodborne-runtime** (this one) | Loads the game: the PS4 libraries, the renderer |
-| [bloodborne-mac](https://github.com/PabloVSouza/bloodborne-mac) | The macOS app (launcher, DMG, releases) |
+| [bloodborne-mac](https://github.com/bloodborne-native/bloodborne-mac) | The macOS app (launcher, DMG, releases) |
 
-**Players:** download the app from [bloodborne-mac](https://github.com/PabloVSouza/bloodborne-mac/releases/latest).
+**Players:** download the app from [bloodborne-mac](https://github.com/bloodborne-native/bloodborne-mac/releases/latest).
 
 ## Build and run
 
 ```bash
-git clone --recursive https://github.com/PabloVSouza/bloodborne-runtime.git
+git clone --recursive https://github.com/bloodborne-native/bloodborne-runtime.git
 cd bloodborne-runtime
 bash build.sh                                  # macOS: the first run also builds deps/
 BB_GAME_DIR=/path/to/your/game bash run.sh     # your own dump, with the 1.09 update

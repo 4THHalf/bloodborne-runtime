@@ -5,7 +5,7 @@
 ## Playing
 
 The player guides (installation, game files, settings, mods, troubleshooting) are in
-[bloodborne-mac](https://github.com/PabloVSouza/bloodborne-mac/tree/main/docs/guide).
+[bloodborne-mac](https://github.com/bloodborne-native/bloodborne-mac/tree/main/docs/guide).
 
 ## Developing
 
@@ -13,9 +13,9 @@ The player guides (installation, game files, settings, mods, troubleshooting) ar
 - [How it works](guide/how-it-works.md): the translator, the runtime, the renderer.
 - [macOS performance](MACOS_PERFORMANCE.md): measurements, what was changed, what could still be
   gained.
-- The CPU layer and the recompiler: [bloodborne-recomp](https://github.com/PabloVSouza/bloodborne-recomp)
-  ([native arm64](https://github.com/PabloVSouza/bloodborne-recomp/blob/main/docs/ARM64_NATIVE.md),
-  [recompilation](https://github.com/PabloVSouza/bloodborne-recomp/blob/main/docs/RECOMPILATION.md)).
+- The CPU layer and the recompiler: [bloodborne-recomp](https://github.com/bloodborne-native/bloodborne-recomp)
+  ([native arm64](https://github.com/bloodborne-native/bloodborne-recomp/blob/main/docs/ARM64_NATIVE.md),
+  [recompilation](https://github.com/bloodborne-native/bloodborne-recomp/blob/main/docs/RECOMPILATION.md)).
 
 ## Project
 

@@ -9,4 +9,4 @@
 	url = https://github.com/Thealexbarney/LibAtrac9.git
 [submodule "recomp"]
 	path = recomp
-	url = https://github.com/PabloVSouza/bloodborne-recomp.git
+	url = https://github.com/bloodborne-native/bloodborne-recomp.git

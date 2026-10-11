@@ -12,12 +12,12 @@
   ```
 
 - A game folder prepared as in
-  [Game files](https://github.com/PabloVSouza/bloodborne-mac/blob/main/docs/guide/game-files.md).
+  [Game files](https://github.com/bloodborne-native/bloodborne-mac/blob/main/docs/guide/game-files.md).
 
 ## Build and run
 
 ```bash
-git clone --recursive https://github.com/PabloVSouza/bloodborne-runtime.git
+git clone --recursive https://github.com/bloodborne-native/bloodborne-runtime.git
 cd bloodborne-runtime
 bash build.sh                                  # the first run also builds the libraries (deps/)
 BB_GAME_DIR=/path/to/your/game bash run.sh
@@ -28,11 +28,11 @@ BB_GAME_DIR=/path/to/your/game bash run.sh
 - The first build compiles the dependencies (MoltenVK, SDL3, FFmpeg, ...) into `deps/` and takes
   a while.
 - From a checkout, saves and the shader cache go to `user/` and settings to `bbport.ini`.
-- The recompiled game: build a library with [bloodborne-recomp](https://github.com/PabloVSouza/bloodborne-recomp)
+- The recompiled game: build a library with [bloodborne-recomp](https://github.com/bloodborne-native/bloodborne-recomp)
   (in `recomp/`) and run with `BB_RECOMP_LIB=recomp/out/recomp/librecomp.dylib`.
 
 The macOS app (launcher, DMG, releases) is
-[bloodborne-mac](https://github.com/PabloVSouza/bloodborne-mac), which builds this repository.
+[bloodborne-mac](https://github.com/bloodborne-native/bloodborne-mac), which builds this repository.
 
 ## Environment variables
 
