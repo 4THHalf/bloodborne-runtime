@@ -61,6 +61,8 @@
   "other.fpsCounter": "角落显示 FPS",
   "menu.close": "关闭",
   "menu.savedIn": "设置保存在 bbport.ini 中",
+  "menu.quit": "退出游戏",
+  "menu.quitAgain": "再按一次退出",
   "fpsCounter.text": "%.0f FPS  %.1f ms  %s",
   "effects.effect_chromatic_aberration": "色差",
   "effects.effect_dof": "景深（DoF）",

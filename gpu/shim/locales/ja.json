@@ -61,6 +61,8 @@
   "other.fpsCounter": "隅に FPS カウンター",
   "menu.close": "閉じる",
   "menu.savedIn": "設定は bbport.ini に保存されます",
+  "menu.quit": "ゲームを終了",
+  "menu.quitAgain": "もう一度押すと終了します",
   "fpsCounter.text": "%.0f FPS  %.1f ms  %s",
   "effects.effect_chromatic_aberration": "色収差",
   "effects.effect_dof": "被写界深度（DoF）",

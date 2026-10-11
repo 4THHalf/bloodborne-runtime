@@ -61,6 +61,8 @@
   "other.fpsCounter": "FPS-teller i hjørnet",
   "menu.close": "Lukk",
   "menu.savedIn": "Innstillingene lagres i bbport.ini",
+  "menu.quit": "Avslutt spillet",
+  "menu.quitAgain": "Trykk igjen for å avslutte",
   "fpsCounter.text": "%.0f FPS  %.1f ms  %s",
   "effects.effect_chromatic_aberration": "Kromatisk aberrasjon",
   "effects.effect_dof": "Dybdeskarphet (DoF)",

@@ -61,6 +61,8 @@
   "other.fpsCounter": "Счётчик FPS в углу",
   "menu.close": "Закрыть",
   "menu.savedIn": "Настройки сохраняются в bbport.ini",
+  "menu.quit": "Выйти из игры",
+  "menu.quitAgain": "Нажмите ещё раз для выхода",
   "fpsCounter.text": "%.0f FPS  %.1f мс  %s",
   "effects.effect_chromatic_aberration": "Хроматическая аберрация",
   "effects.effect_dof": "Глубина резкости (DoF)",

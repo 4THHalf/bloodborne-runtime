@@ -61,6 +61,8 @@
   "other.fpsCounter": "모서리에 FPS 표시",
   "menu.close": "닫기",
   "menu.savedIn": "설정은 bbport.ini에 저장됩니다",
+  "menu.quit": "게임 종료",
+  "menu.quitAgain": "한 번 더 누르면 종료됩니다",
   "fpsCounter.text": "%.0f FPS  %.1f ms  %s",
   "effects.effect_chromatic_aberration": "색수차",
   "effects.effect_dof": "피사계 심도 (DoF)",

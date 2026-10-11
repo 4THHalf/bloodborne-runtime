@@ -61,6 +61,8 @@
   "other.fpsCounter": "FPS-räknare i hörnet",
   "menu.close": "Stäng",
   "menu.savedIn": "Inställningarna sparas i bbport.ini",
+  "menu.quit": "Avsluta spelet",
+  "menu.quitAgain": "Tryck igen för att avsluta",
   "fpsCounter.text": "%.0f FPS  %.1f ms  %s",
   "effects.effect_chromatic_aberration": "Kromatisk aberration",
   "effects.effect_dof": "Skärpedjup (DoF)",

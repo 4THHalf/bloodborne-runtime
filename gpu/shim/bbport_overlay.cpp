@@ -445,7 +445,21 @@ void Menu() {
     if (ImGui::Button(T("menu.close"))) {
         keep_open = false;
     }
+    // Issues #74, #116: leaving the game from the pad (this menu opens with L3+R3). A second
+    // press confirms; the window thread then closes like the window's own close button.
+    static bool quit_armed;
     ImGui::SameLine();
+    if (ImGui::Button(T(quit_armed ? "menu.quitAgain" : "menu.quit"))) {
+        if (quit_armed) {
+            SDL_Event quit{};
+            quit.type = SDL_EVENT_QUIT;
+            SDL_PushEvent(&quit);
+        }
+        quit_armed = !quit_armed;
+    }
+    if (quit_armed && !ImGui::IsItemFocused() && !ImGui::IsItemHovered()) {
+        quit_armed = false;
+    }
     ImGui::TextDisabled(T("menu.savedIn"));
     ImGui::End();
     if (!keep_open) {

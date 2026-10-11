@@ -61,6 +61,8 @@
   "other.fpsCounter": "Köşede FPS sayacı",
   "menu.close": "Kapat",
   "menu.savedIn": "Ayarlar bbport.ini dosyasına kaydedilir",
+  "menu.quit": "Oyundan çık",
+  "menu.quitAgain": "Çıkmak için tekrar basın",
   "fpsCounter.text": "%.0f FPS  %.1f ms  %s",
   "effects.effect_chromatic_aberration": "Renk sapması",
   "effects.effect_dof": "Alan derinliği (DoF)",

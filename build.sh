@@ -63,12 +63,22 @@ mkdir -p pgo
 if [[ ! -f gpu/third_party/fsr-vulkan/CMakeLists.txt || ! -f gpu/third_party/imgui/imgui.h ]]; then
     git submodule update --init --recursive
 fi
-if (( ! macos )); then
+# Issue #124: a checkout updated from an earlier version keeps that version's patch applied, and
+# the new one applies neither way ("patch does not apply"): the submodule's tree holds nothing but
+# these patches, so it is reset and they are applied again.
+fsr_patches_apply() {
     for patch in gpu/patches/fsr-vulkan/*.patch; do
         if ! git -C gpu/third_party/fsr-vulkan apply --reverse --check "$PWD/$patch" 2>/dev/null; then
-            git -C gpu/third_party/fsr-vulkan apply "$PWD/$patch"
+            git -C gpu/third_party/fsr-vulkan apply "$@" "$PWD/$patch" || return 1
         fi
     done
+}
+if (( ! macos )); then
+    if ! fsr_patches_apply --check 2>/dev/null; then
+        echo 'FSR-Vulkan: an earlier version of the port changed it; resetting it and patching again'
+        git -C gpu/third_party/fsr-vulkan checkout -- .
+    fi
+    fsr_patches_apply
 fi
 cmake_platform=()
 gpudir=out/gpu
@@ -81,7 +91,7 @@ cmake -S gpu -B "$gpudir" -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBB_PGO="$
     -DBB_LTO="${BB_LTO:-ON}" -DBB_PGO_DIR="$PWD/pgo" "${cmake_platform[@]}" >/dev/null
 echo "GPU library: PGO $pgo, LTO ${BB_LTO:-ON}"
 # A failed GPU build must stop here: an older libbbgpu.so would otherwise be used silently.
-if ! ninja -C "$gpudir" bbgpu > out/gpu-build.log 2>&1; then
+if ! ninja -C "$gpudir" bbgpu $(grep -q "^build bbnet:" "$gpudir/build.ninja" && echo bbnet) > out/gpu-build.log 2>&1; then
     grep -v '^\[' out/gpu-build.log | tail -40 >&2
     echo 'GPU library build failed (full log: out/gpu-build.log)' >&2; exit 1
 fi
@@ -145,6 +155,8 @@ if [[ ${1:-} == --test ]]; then
     out/file-mods-test
     "$CC" "${arch[@]}" -std=c11 -O2 -g -Wall -Wextra -Werror "${warnings[@]}" -pthread "${includes[@]}" -I. -Isrc -Irecomp/src tests/test_sema.c "${runtime[@]}" "$atrac9_lib" "${cpu[@]}" -lm "${gpu[@]}" "${libraries[@]}" -o out/sema-test
     out/sema-test
+    "$CC" "${arch[@]}" -std=c11 -O2 -g -Wall -Wextra -Werror "${warnings[@]}" -pthread "${includes[@]}" -I. -Isrc -Irecomp/src tests/test_online.c "${runtime[@]}" "$atrac9_lib" "${cpu[@]}" -lm "${gpu[@]}" "${libraries[@]}" -o out/online-test
+    out/online-test
     "$CC" "${arch[@]}" -std=c11 -D_GNU_SOURCE -O2 -g -Wall -Wextra -Werror -I. -Isrc -Irecomp/src tests/test_content.c src/runtime_content.c src/platform.c -o out/content-test
     out/content-test
     "$CC" "${arch[@]}" -std=c11 -O2 -g -Wall -Wextra -Werror -pthread -Isrc -Irecomp/src tests/test_guest_tls.c src/platform.c -o out/guest-tls-test

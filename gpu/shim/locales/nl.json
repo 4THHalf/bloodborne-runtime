@@ -61,6 +61,8 @@
   "other.fpsCounter": "FPS-teller in de hoek",
   "menu.close": "Sluiten",
   "menu.savedIn": "Instellingen worden opgeslagen in bbport.ini",
+  "menu.quit": "Spel afsluiten",
+  "menu.quitAgain": "Druk nogmaals om af te sluiten",
   "fpsCounter.text": "%.0f FPS  %.1f ms  %s",
   "effects.effect_chromatic_aberration": "Chromatische aberratie",
   "effects.effect_dof": "Scherptediepte (DoF)",

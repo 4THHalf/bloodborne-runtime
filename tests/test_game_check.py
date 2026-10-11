@@ -60,20 +60,14 @@ class GameCheckTests(unittest.TestCase):
     def test_update_metadata_with_an_old_executable(self):
         self.assertEqual(game_check.problem(self.game('CUSA03173', '01.09'))[0], 'wrong_eboot')
 
-    def test_other_edition_with_another_executable(self):
-        self.assertEqual(game_check.problem(self.game('CUSA00207', '01.09'))[0], 'other_build')
-
-    def test_other_edition_with_the_supported_executable_passes(self):
-        game = self.game('CUSA00207', '01.09')
-        with mock.patch.object(game_check, 'SUPPORTED_IMAGE', game_check.image_sha256(game)):
-            self.assertIsNone(game_check.problem(game))
-
-    def test_not_bloodborne(self):
-        self.assertEqual(game_check.problem(self.game('CUSA00001', '01.09'))[0], 'other_title')
+    def test_other_edition(self):
+        # The EU alpha test: not a retail release.
+        self.assertEqual(game_check.problem(self.game('CUSA01322', '01.09'))[0], 'other_title')
 
     def test_describe_edition(self):
         game = self.game('CUSA03173', '01.09')
         self.assertEqual(game_check.describe(game)['old_hunters'], True)
+        self.assertEqual(game_check.describe(self.game('CUSA03179', '01.09'))['old_hunters'], True)
         self.assertEqual(game_check.describe(self.game('CUSA00207', '01.09'))['old_hunters'], False)
 
     def test_unreadable_executable(self):
@@ -113,13 +107,23 @@ class GameCheckTests(unittest.TestCase):
         self.shaders(game, bytes(data[:0x50]))
         self.assertEqual(game_check.broken_files(game), [])
 
+    def test_every_retail_base_game_without_the_update(self):
+        for title in game_check.SUPPORTED_TITLES:
+            with self.subTest(title=title):
+                self.assertEqual(game_check.problem(self.game(title, '01.00'))[0], 'missing_update')
+
+    def test_eboot_with_the_60fps_patch(self):
+        game = self.game('CUSA00900', '01.09')
+        with mock.patch.object(game_check, 'LANCE_60FPS_IMAGE', game_check.image_sha256(game)):
+            self.assertEqual(game_check.problem(game)[0], 'patched_eboot')
+
     def test_skip_switch(self):
         os.environ['BB_SKIP_GAME_CHECK'] = '1'
         self.assertIsNone(game_check.problem(self.game('CUSA03173', '01.00')))
 
     def test_every_problem_is_explained(self):
-        for kind in ('missing_update', 'wrong_eboot', 'other_build', 'other_title', 'unreadable',
-                     'damaged_files'):
+        for kind in ('missing_update', 'wrong_eboot', 'patched_eboot', 'other_title',
+                     'unreadable', 'damaged_files'):
             self.assertIn('CUSA', game_check.explain(kind, 'CUSA03173', '01.00'))
 
 

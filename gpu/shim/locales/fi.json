@@ -61,6 +61,8 @@
   "other.fpsCounter": "FPS-laskuri kulmassa",
   "menu.close": "Sulje",
   "menu.savedIn": "Asetukset tallennetaan tiedostoon bbport.ini",
+  "menu.quit": "Lopeta peli",
+  "menu.quitAgain": "Paina uudelleen lopettaaksesi",
   "fpsCounter.text": "%.0f FPS  %.1f ms  %s",
   "effects.effect_chromatic_aberration": "Väriaberraatio",
   "effects.effect_dof": "Syväterävyys (DoF)",

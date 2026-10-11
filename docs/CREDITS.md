@@ -9,12 +9,14 @@ project it is based on.
 
 - [**deadinside28/bloodborne_pc**](https://github.com/deadinside28/bloodborne_pc) (bbport) by
   deadinside28: the native Linux port this project started from as a fork, and a separate
-  repository since October 2026. Its releases are merged here as they come out (now **0.5**), with
+  repository since October 2026. Its releases are merged here as they come out (now **0.51**), with
   their history; the merge commits name each one. It provides the loader, the PS4 runtime, the
   renderer extensions, the upscalers, the game-specific fixes and the original launcher. Code
   taken from it keeps its authorship in the git history.
 - [**shadPS4**](https://github.com/shadps4-emu/shadPS4): the video core and shader recompiler
   (GPL-2.0+), and [sirit](https://github.com/shadps4-emu/sirit).
+- **shadp2p** (a shadPS4 fork, GPL-2.0): the network and PSN libraries of the online module
+  (`gpu/bbnet`, shadNet), from bbport 0.51.
 
 ## From other forks
 
@@ -35,6 +37,7 @@ Changes taken from other ports of bbport, with thanks:
 - [FSR-Vulkan](https://github.com/FireBurn/FSR-Vulkan) by FireBurn and the AMD FidelityFX SDK (MIT)
 - [LibAtrac9](https://github.com/Thealexbarney/LibAtrac9) (MIT)
 - [Dear ImGui](https://github.com/ocornut/imgui) (MIT)
+- [cpp-httplib](https://github.com/yhirose/cpp-httplib) by Yuji Hirose (MIT), in the online module
 - [half](https://half.sourceforge.net/) (MIT)
 - DejaVu fonts
 - The launcher: [Tauri](https://tauri.app), [React](https://react.dev),

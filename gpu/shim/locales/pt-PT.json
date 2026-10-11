@@ -61,6 +61,8 @@
   "other.fpsCounter": "Contador de FPS no canto",
   "menu.close": "Fechar",
   "menu.savedIn": "As definições são guardadas em bbport.ini",
+  "menu.quit": "Sair do jogo",
+  "menu.quitAgain": "Prima novamente para sair",
   "fpsCounter.text": "%.0f FPS  %.1f ms  %s",
   "effects.effect_chromatic_aberration": "Aberração cromática",
   "effects.effect_dof": "Profundidade de campo (DoF)",
