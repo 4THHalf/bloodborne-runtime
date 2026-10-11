@@ -92,6 +92,15 @@ public:
                       const VideoCore::SubresourceRange& dst_range);
     void ClearImage(VideoCore::Image* dst, const VideoCore::SubresourceRange& range,
                     const vk::ClearValue& clear_value);
+    /// bbport BB_DEFER_CLEARS (default on, =0 to disable): ClearImage notes the clear on the
+    /// image; a render pass that draws into the whole cleared range takes it as its load action
+    /// (TakePendingClear), and
+    /// anything else that uses the image records it first (ResolvePendingClear, from Transit).
+    /// A clear between passes is a render pass of its own on tile-based GPUs.
+    static bool DeferClears();
+    void ResolvePendingClear(VideoCore::Image* image);
+    bool TakePendingClear(VideoCore::Image* image, const VideoCore::SubresourceRange& range,
+                          vk::ClearColorValue& value);
 
     void SetBackingSamples(VideoCore::Image* image, u32 num_samples, bool copy_backing = true);
 
@@ -120,6 +129,8 @@ public:
     }
 
 private:
+    void RecordClear(VideoCore::Image* dst, const VideoCore::SubresourceRange& range,
+                     const vk::ClearColorValue& color);
     void (*image_access_hook)(void*) = nullptr;
     void* image_access_context = nullptr;
     const Instance& instance;

@@ -301,7 +301,11 @@ void NoteNearBreak(const RenderState& before, const RenderState& after, void* ca
 } // namespace
 
 void Scheduler::BeginRendering(const RenderState& new_state) {
-    if (is_rendering && render_state == new_state) {
+    // bbport: a pass that takes a deferred clear (Runtime::TakePendingClear) starts anew even
+    // when the open pass has the same state: the clear happens between its draws.
+    const bool fresh = force_new_pass;
+    force_new_pass = false;
+    if (is_rendering && !fresh && (render_state == new_state || ContinuesClearedPass(new_state))) {
         return;
     }
     if (PassBreakTrace() && !is_rendering && last_end_valid && new_state == last_ended_state) {
@@ -317,7 +321,7 @@ void Scheduler::BeginRendering(const RenderState& new_state) {
     last_end_valid = false;
     // bbport: a cut of the command stream (MaybeSplit) closed this render pass; it continues
     // in the next command buffer without clearing its attachments again.
-    const bool resume = resume_rendering && !is_rendering && render_state == new_state;
+    const bool resume = resume_rendering && !is_rendering && render_state == new_state && !fresh;
     if (!is_rendering && render_state == new_state && pass_end_caller) {
         TracePassBreak(pass_end_caller);
     }

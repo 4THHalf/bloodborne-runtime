@@ -78,7 +78,7 @@ GPU's idle time and in what each pass costs.
 | | Step | Platforms | Status |
 |---|---|---|---|
 | N0 | Scoping: where the command stream comes from, where a frame's time goes | all | Done (2026-10-11) |
-| N1 | Frame planning in today's renderer: clears as load actions, constant tessellation as triangles, copies batched | all | |
+| N1 | Frame planning in today's renderer: clears as load actions, constant tessellation as triangles, copies batched | all | In progress: deferred clears done (2026-10-11) |
 | N2 | Shaders ahead of time: every shader in the game's files converted at install (SPIR-V; MSL with N5) | all | |
 | N3 | Textures as objects: created when the game creates them (libGnm texture setup, the engine's texture loader), detiled once at install | all | |
 | N4 | The backend interface: the Vulkan-specific code of the renderer behind it | all | |
@@ -86,6 +86,16 @@ GPU's idle time and in what each pass costs.
 | N6 | The engine's own render layer as the boundary (needs R4's names and structures) | all | |
 
 N1 to N3 also make today's renderer faster on every platform; N4 and N5 remove MoltenVK.
+
+The first N1 change defers color clears until their next use. A pass that draws over the full
+cleared image uses a clear load action; other uses record the clear before accessing the image.
+It is on by default, with `BB_DEFER_CLEARS=0` as the off switch. Four alternating traced runs in
+the clinic (off/on/off/on, same save and position) measured 46.7/47.3/44.6/47.9 FPS during the
+level hold. Separate color-clear encoders fell from 17.8/16.8 to 14.7/13.6 per frame. Idle
+inside command buffers was 5.0/4.7 ms off and 4.7/4.3 ms on. The on traces had variable idle
+between command buffers (1.6 and 3.7 ms, against 0.8 and 1.3 ms off); their total GPU time is
+not a stable estimate of this change. Game-generated frames at the same position looked alike.
+The next N1 items are the tessellated light draws and buffer-copy batching.
 
 N3 hooks the engine's own functions. With the recompiled library loaded, recompiled functions call
 each other directly and skip hooks, so the recompiler first has to send calls to hooked functions

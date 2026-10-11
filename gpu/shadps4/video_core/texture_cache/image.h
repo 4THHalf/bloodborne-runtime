@@ -154,6 +154,12 @@ public:
         u32 vo_surface : 1;
     } usage{};
     bool scene_proxy = false; ///< bbport: SceneTargets holds a reduced-size proxy of it
+    /// bbport (BB_DEFER_CLEARS): a clear not recorded yet (Runtime::ClearImage). The next render
+    /// pass that draws into exactly this range clears it on load; anything else that uses the
+    /// image records it first (Runtime::ResolvePendingClear).
+    bool pending_clear = false;
+    SubresourceRange pending_clear_range{};
+    vk::ClearColorValue pending_clear_value{};
     VAddr track_addr = 0;
     VAddr track_addr_end = 0;
     VAddr guest_begin = 0; ///< info.guest_address

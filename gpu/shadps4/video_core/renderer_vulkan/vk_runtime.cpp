@@ -1,6 +1,9 @@
 // SPDX-FileCopyrightText: Copyright 2025 shadPS4 Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <atomic>
+#include <cstdio>
+#include <cstdlib>
 #include <boost/container/small_vector.hpp>
 #include "bbport_toggles.h"
 #include "video_core/buffer_cache/buffer.h"
@@ -239,6 +242,9 @@ bool Runtime::Transit(VideoCore::Image* image, vk::ImageLayout dst_layout,
                       vk::PipelineStageFlags2 dst_stage, vk::AccessFlags2 dst_access,
                       std::optional<VideoCore::SubresourceRange> subres_range) {
     BeforeImageAccess();
+    if (image->pending_clear) [[unlikely]] {
+        ResolvePendingClear(image);
+    }
     if (scene_targets) scene_targets->NativeAccess(*image, dst_access);
     const size_t prev_num_barriers = static_cast<size_t>(image_barriers.size());
     image->GetBarriers(image_barriers, dst_layout, dst_access, dst_stage, subres_range);
@@ -695,8 +701,64 @@ void Runtime::ResolveImage(VideoCore::Image* src, VideoCore::Image* dst,
     dst->flags &= ~VideoCore::ImageFlagBits::Dirty;
 }
 
+namespace {
+// bbport BB_DEFER_CLEARS: clears noted, taken as load actions, recorded on their own (diagnostics).
+std::atomic<u64> clears_deferred{0}, clears_taken{0}, clears_recorded{0};
+} // namespace
+
+bool Runtime::DeferClears() {
+    static const bool on = [] {
+        const char* env = std::getenv("BB_DEFER_CLEARS");
+        return !env || env[0] != '0';
+    }();
+    return on;
+}
+
 void Runtime::ClearImage(VideoCore::Image* dst, const VideoCore::SubresourceRange& range,
                          const vk::ClearValue& clear_value) {
+    if (!DeferClears()) {
+        RecordClear(dst, range, clear_value.color);
+        return;
+    }
+    // A later clear of the same range replaces a pending one: nothing used the image between.
+    if (dst->pending_clear && dst->pending_clear_range != range) {
+        ResolvePendingClear(dst);
+    }
+    dst->pending_clear = true;
+    dst->pending_clear_range = range;
+    dst->pending_clear_value = clear_value.color;
+    dst->flags |= VideoCore::ImageFlagBits::GpuModified;
+    dst->flags &= ~VideoCore::ImageFlagBits::Dirty;
+    const u64 n = clears_deferred.fetch_add(1, std::memory_order_relaxed) + 1;
+    if ((n & 0x3fff) == 0) {
+        std::printf("Deferred clears: %llu, %llu taken as load actions, %llu recorded on their own\n",
+                    (unsigned long long)n, (unsigned long long)clears_taken.load(),
+                    (unsigned long long)clears_recorded.load());
+    }
+}
+
+void Runtime::ResolvePendingClear(VideoCore::Image* image) {
+    if (!image->pending_clear) {
+        return;
+    }
+    image->pending_clear = false;
+    clears_recorded.fetch_add(1, std::memory_order_relaxed);
+    RecordClear(image, image->pending_clear_range, image->pending_clear_value);
+}
+
+bool Runtime::TakePendingClear(VideoCore::Image* image, const VideoCore::SubresourceRange& range,
+                               vk::ClearColorValue& value) {
+    if (!image->pending_clear || image->pending_clear_range != range) {
+        return false;
+    }
+    image->pending_clear = false;
+    value = image->pending_clear_value;
+    clears_taken.fetch_add(1, std::memory_order_relaxed);
+    return true;
+}
+
+void Runtime::RecordClear(VideoCore::Image* dst, const VideoCore::SubresourceRange& range,
+                          const vk::ClearColorValue& color) {
     scheduler.EndRendering();
 
     const bool needs_flush =
@@ -713,7 +775,7 @@ void Runtime::ClearImage(VideoCore::Image* dst, const VideoCore::SubresourceRang
         .baseArrayLayer = range.base.layer,
         .layerCount = range.extent.layers,
     };
-    scheduler.Record([image = dst->GetImage(), color = clear_value.color,
+    scheduler.Record([image = dst->GetImage(), color,
                       vk_range](vk::CommandBuffer cmdbuf) {
         cmdbuf.clearColorImage(image, vk::ImageLayout::eTransferDstOptimal, color, vk_range);
     });
@@ -730,6 +792,7 @@ void Runtime::SetBackingSamples(VideoCore::Image* image, u32 num_samples, bool c
     if (!backing || backing->num_samples == num_samples) {
         return;
     }
+    ResolvePendingClear(image); // into the backing it was meant for
     ASSERT_MSG(!image->info.props.is_depth, "Swapping samples is only valid for color images");
     VideoCore::Image::BackingImage* new_backing;
     auto it = std::ranges::find(backing_images, num_samples,

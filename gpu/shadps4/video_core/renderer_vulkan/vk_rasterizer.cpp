@@ -1771,6 +1771,7 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
         return;
     }
     const auto state = BeginRendering(pipeline);
+    const TakenClearsGuard taken_clears_guard{*this};
 
     if (!inputs_resolved) {
         ResolveVertexBuffers(pipeline, draw_prepared);
@@ -1904,6 +1905,7 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
         draw_jitter = upscaler->Jitter();
     }
     UpdateDynamicState(pipeline, is_indexed);
+    CommitTakenClears();
     MarkPass(pipeline, state);
     scheduler.BeginRendering(state);
 
@@ -2011,6 +2013,7 @@ void Rasterizer::DrawIndirectRecord(const GraphicsPipeline* pipeline, bool is_in
         return;
     }
     const auto state = BeginRendering(pipeline);
+    const TakenClearsGuard taken_clears_guard{*this};
 
     BindVertexBuffers(pipeline);
     if (is_indexed) {
@@ -2044,6 +2047,7 @@ void Rasterizer::DrawIndirectRecord(const GraphicsPipeline* pipeline, bool is_in
         draw_jitter = upscaler->Jitter();
     }
     UpdateDynamicState(pipeline, is_indexed);
+    CommitTakenClears();
     MarkPass(pipeline, state);
     scheduler.BeginRendering(state);
 
@@ -2364,7 +2368,8 @@ bool Rasterizer::TexturesBindableOnHelper(const Shader::Info& stage,
             image_id = depth_image_id;
             image = &texture_cache.GetImage(image_id);
         }
-        if (image->binding.needs_rebind || !texture_cache.IsUpToDate(image_id) ||
+        if (image->binding.needs_rebind || image->pending_clear ||
+            !texture_cache.IsUpToDate(image_id) ||
             scene_targets->Tracks(image->image_uid) ||
             (upscaler->Enabled() && upscaler->RedirectsSampled(image_id))) {
             return false;
@@ -2386,6 +2391,21 @@ void Rasterizer::RunTextureTask(void* context) {
         self.BindTextures(*stage.info, stage.prepared, binding, write_index, task.barrier, true);
         task.completed = i + 1;
     }
+}
+
+void Rasterizer::CommitTakenClears() {
+    if (!taken_clears.empty()) {
+        scheduler.ForceNewPass();
+        taken_clears.clear();
+    }
+}
+
+void Rasterizer::RestoreTakenClears() {
+    // The draw ended before its pass began: the clears are pending again.
+    for (const auto id : taken_clears) {
+        texture_cache.GetImage(id).pending_clear = true;
+    }
+    taken_clears.clear();
 }
 
 void Rasterizer::JoinBindHelper(void* context) {
@@ -4073,7 +4093,8 @@ RenderState Rasterizer::BeginRendering(const GraphicsPipeline* pipeline) {
         for (const auto id : signature.ids) {
             if (usable && id) {
                 const auto& image = texture_cache.GetImage(id);
-                usable = !image.binding.is_bound && !image.binding.needs_rebind;
+                usable = !image.binding.is_bound && !image.binding.needs_rebind &&
+                         !image.pending_clear;
             }
         }
         if (usable) {
@@ -4203,6 +4224,14 @@ RenderState Rasterizer::BeginRenderingFull(const GraphicsPipeline* pipeline) {
         const bool is_clear = texture_cache.IsMetaCleared(col_buf.CmaskAddress(), slice);
         texture_cache.TouchMeta(col_buf.CmaskAddress(), slice, false);
 
+        // bbport BB_DEFER_CLEARS: a deferred clear of exactly this view becomes the pass's load
+        // action (the pass's final size is checked below); otherwise it is recorded now.
+        vk::ClearColorValue taken_clear{};
+        const bool takes_clear = image->pending_clear && !reduced && !image->binding.is_bound &&
+                                 !is_clear && !(cb == 0 && upscaler->Enabled()) &&
+                                 runtime.TakePendingClear(image, image_view.info.range, taken_clear);
+        runtime.ResolvePendingClear(image);
+
         if (reduced) {
             // The native image is resolved lazily when a shader/copy actually reads it.
         } else if (image->binding.is_bound) {
@@ -4237,6 +4266,11 @@ RenderState Rasterizer::BeginRenderingFull(const GraphicsPipeline* pipeline) {
         attachment.image_layout = image->backing->state.layout;
         attachment.clear_value = clear_value.color.uint32;
         attachment.is_clear = is_clear;
+        if (takes_clear) {
+            attachment.clear_value = taken_clear.uint32;
+            attachment.is_clear = true;
+            taken_clears.push_back(image_id);
+        }
 
         if (reduced) {
             const auto target = scene_targets->Attachment(image_id, desc.view_info);
@@ -4398,6 +4432,40 @@ RenderState Rasterizer::BeginRenderingFull(const GraphicsPipeline* pipeline) {
         state.width = proxy.width;
         state.height = proxy.height;
         target_scale = {float(size.width) / 1920.0f, float(size.height) / 1080.0f};
+    }
+    // bbport BB_DEFER_CLEARS: a load action clears the render area only. A taken clear whose image
+    // is larger than the pass (beside a smaller attachment, a redirected pass) is recorded on its
+    // own after all, and the image goes back to the attachment layout.
+    for (u32 k = 0; k < taken_clears.size();) {
+        auto& image = texture_cache.GetImage(taken_clears[k]);
+        const auto& range = image.pending_clear_range;
+        const u32 mip = range.base.level;
+        u32 cb = 0;
+        while (cb < state.num_color_attachments && cb_descs[cb].first != taken_clears[k]) {
+            ++cb;
+        }
+        if (cb < state.num_color_attachments &&
+            state.width == std::max(image.info.size.width >> mip, 1u) &&
+            state.height == std::max(image.info.size.height >> mip, 1u) &&
+            state.num_layers == range.extent.layers && range.extent.levels == 1) {
+            ++k;
+            continue;
+        }
+        image.pending_clear = true;
+        runtime.ResolvePendingClear(&image);
+        runtime.Transit(&image, vk::ImageLayout::eColorAttachmentOptimal,
+                        vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+                        vk::AccessFlagBits2::eColorAttachmentWrite |
+                            vk::AccessFlagBits2::eColorAttachmentRead,
+                        range);
+        runtime.FlushBarriers();
+        if (cb < state.num_color_attachments) {
+            auto& attachment = state.color_attachments[cb];
+            attachment.is_clear = false;
+            attachment.clear_value = {};
+            attachment.image_layout = image.backing->state.layout;
+        }
+        taken_clears.erase(taken_clears.begin() + k);
     }
     if (FrameCapture::Active()) {
         std::array<const VideoCore::ImageInfo*, AmdGpu::NUM_COLOR_BUFFERS> colors{};

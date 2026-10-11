@@ -416,6 +416,18 @@ private:
     static void RunTextureTask(void* rasterizer);
     static void JoinBindHelper(void* rasterizer);
 
+    /// bbport BB_DEFER_CLEARS: render targets whose deferred clear the pass being set up takes as
+    /// its load action. Committed when the pass begins; a draw that ends before puts them back.
+    boost::container::static_vector<VideoCore::ImageId, 8> taken_clears;
+    void CommitTakenClears();
+    void RestoreTakenClears();
+    struct TakenClearsGuard {
+        Rasterizer& rasterizer;
+        ~TakenClearsGuard() {
+            rasterizer.RestoreTakenClears();
+        }
+    };
+
     /// Display pass: counts the frame (BbStats::gpu_frames) and, with BB_BUFFER_STATS, the lag.
     void NoteFrameStart();
     /// BB_GPU_PROFILE: a timestamp where a render pass starts (vk_gpu_profiler.h).

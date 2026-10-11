@@ -32,8 +32,17 @@ GPU time per frame at native 1080p:
 
 ## Changes that helped
 
+Four alternating Metal-traced runs in the clinic on 2026-10-11 measured deferred color clears
+(`BB_DEFER_CLEARS`, default on; `=0` disables them): 46.7 and 44.6 FPS off, 47.3 and 47.9 FPS
+on during the level hold. The median frame times were 21.2/21.5 ms off and 20.9/20.7 ms on;
+game CPU was 489%/499% off and 480%/495% on (100% is one core). Separate color-clear encoders
+fell from 17.8/16.8 to 14.7/13.6 per frame. The trace's idle inside command buffers was
+5.0/4.7 ms off and 4.7/4.3 ms on. Idle between command buffers varied from 0.8 to 3.7 ms
+across these traces, so the FPS and frame times are better measures of the net effect.
+
 | Change | Effect |
 |---|---|
+| Color clears deferred to the next render pass's load action (`BB_DEFER_CLEARS`) | 44.6–46.7 → 47.3–47.9 FPS in two alternating pairs; 3–4 fewer clear encoders per frame |
 | GPU memory kept resident in a Metal residency set (`gpu/shim/bbport_metal_residency.*`) | 9–14 FPS with 400–650 ms hitches → 16.8 FPS steady (Rosetta build) |
 | No SPIR-V `NoContraction`: SPIRV-Cross turned it into unoptimizable `[[clang::optnone]]` add/multiply helpers in every shader | 16.7 → 30.4 FPS |
 | Copy-shader copies recorded before the render pass instead of splitting it (`BB_HOIST_COPIES`), batched | ~1–2 ms |
@@ -74,8 +83,8 @@ Utilization" overstates how busy the GPU is; use Metal System Traces (`TRACE=1` 
      restart each on MoltenVK: ~2–3 ms (removing them entirely: 31 → 34 FPS). Their hull shader
      uses constant factors (outer 3, inner 1), so they could be pre-tessellated into ordinary
      triangles (merging the LS, HS and DS stages in the recompiler).
-   - Image clears as separate passes (~10 a frame, ~1.2 ms): fold them into the next pass's load
-     action.
+   - Deferred color clears remove 3–4 separate clear encoders a frame in the clinic. The
+     remaining clears (~14 a frame there) need a closer look before extending the rule.
    - Small buffer copies between passes (~1–1.5 ms): batch further.
 2. **Vertex work, ~6 ms a frame at native.** Vertex shaders read constants from storage buffers
    one value at a time; uniformly indexed read-only buffers declared as constant buffers might

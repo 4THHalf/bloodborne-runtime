@@ -65,6 +65,19 @@ struct RenderState {
     bool operator==(const RenderState& other) const noexcept {
         return std::memcmp(this, &other, sizeof(RenderState)) == 0;
     }
+
+    /// bbport: the same targets loaded instead of cleared.
+    RenderState WithoutClears() const noexcept {
+        RenderState state = *this;
+        for (auto& attachment : state.color_attachments) {
+            attachment.clear_value = {};
+            attachment.is_clear = 0;
+        }
+        state.depth_stencil_attachment.clear_value = {};
+        state.depth_stencil_attachment.depth_clear = false;
+        state.depth_stencil_attachment.stencil_clear = false;
+        return state;
+    }
 };
 static_assert(std::has_unique_object_representations_v<RenderState>);
 
@@ -1024,12 +1037,29 @@ public:
     static bool HoistCopies();
 
     [[nodiscard]] bool IsRenderingWith(const RenderState& state) const {
-        return is_rendering && render_state == state;
+        return is_rendering && (render_state == state || ContinuesClearedPass(state));
     }
 
     /// Whether BeginRendering(state) would start a new render pass.
     [[nodiscard]] bool WillBeginRendering(const RenderState& state) const {
-        return !(is_rendering && render_state == state);
+        return force_new_pass || !IsRenderingWith(state);
+    }
+
+    /// bbport BB_DEFER_CLEARS: a draw that loads the targets of the open pass, which cleared
+    /// them on load, continues that pass (the clear already happened) instead of starting one.
+    [[nodiscard]] bool ContinuesClearedPass(const RenderState& state) const {
+        static const bool on = [] {
+            const char* env = std::getenv("BB_DEFER_CLEARS");
+            return !env || env[0] != '0';
+        }();
+        return on && is_rendering && render_state.WithoutClears() == state &&
+               state.WithoutClears() == state;
+    }
+
+    /// bbport: the next BeginRendering starts a new render pass (a deferred clear taken as a
+    /// load action, Runtime::TakePendingClear).
+    void ForceNewPass() {
+        force_new_pass = true;
     }
 
     /// bbport BB_PASS_LABELS=1: the next render pass is recorded inside a debug label with this
@@ -1251,6 +1281,7 @@ private:
     std::atomic<u32> active_worker{0}; ///< the worker of current_segment (it spins for work)
     size_t segment_bytes = 0;          ///< closures of the current segment handed over or retired
     size_t split_bytes = 0;            ///< segment length at which the stream is cut
+    bool force_new_pass = false;       ///< bbport: ForceNewPass
     bool resume_rendering = false;     ///< a cut closed the render pass with render_state
     void* pass_end_caller = nullptr;   ///< BB_PASS_BREAK_TRACE: who ended the last render pass
     std::unique_ptr<RecordChunk> record_chunk;
