@@ -209,9 +209,9 @@ interface. No Metal-specific type or policy belongs in the shared core.
 | Device and memory | `vk_instance.cpp` chooses features, queues, VMA and MoltenVK extensions; `buffer_cache/buffer.cpp` allocates ordinary or sparse buffers, imports host memory on macOS and obtains buffer device addresses; `texture_cache/image.cpp` creates VMA images. | Device capabilities; buffers and images with explicit memory backing and address support. Keep sparse binding, imported host pointers and MoltenVK residency inside the backend. |
 | Views and sampling | `texture_cache/image_view.cpp` creates image views; `texture_cache/sampler.cpp` creates samplers; `vk_runtime.cpp` and the upscaler use image handles directly. | Opaque views with exact mip/layer/aspect ranges, samplers, and image operations. |
 | Graphics and compute pipelines | `vk_pipeline_cache.cpp`, `vk_graphics_pipeline.cpp` and `vk_compute_pipeline.cpp` compile/cache SPIR-V modules, create pipeline layouts, set dynamic state and choose tessellation stages. | Shader modules with stage and reflection, pipeline descriptions and backend cache keys; patch topology and control points remain expressible. |
-| Descriptors | `vk_graphics_pipeline.cpp`, `vk_compute_pipeline.cpp`, `vk_resource_pool.cpp` and `vk_rasterizer.cpp` allocate or push descriptor sets and bind sampled/storage images, buffers and samplers. | Backend-neutral resource tables and ranges, including storage buffers/images and dynamic offsets. |
-| Passes and commands | `vk_rasterizer.cpp` builds target views, render area and deferred-clear load actions; `vk_scheduler.cpp` opens/closes dynamic rendering and records draws/dispatches; `vk_runtime.cpp` records copies, resolves and transitions. | Render-pass begin with per-attachment load/store/clear, exact view and area; draw/dispatch/copy/resolve commands. |
-| Hazards | `texture_cache/image.cpp` tracks layouts and subresources; `vk_runtime.cpp`, `vk_rasterizer.cpp`, `vk_presenter.cpp` and `vk_scheduler.cpp` emit image/buffer barriers. `vk_barrier_tracker.cpp` tracks overlapping access ranges without Vulkan calls. | Shared hazard intent and subresource ranges, translated into API-specific barriers. Keep the range tracker in the core. |
+| Descriptors | `vk_graphics_pipeline.cpp`, `vk_compute_pipeline.cpp`, `vk_resource_pool.cpp` and `vk_rasterizer.cpp` allocate or push descriptor sets and bind sampled/storage images, buffers and samplers. | Flat, typed binding slots per shader stage and draw/dispatch, including storage buffers/images, offsets and ranges. |
+| Passes and commands | `vk_rasterizer.cpp` builds target views, render area and deferred-clear load actions; `vk_scheduler.cpp` queues `Record` lambdas taking `vk::CommandBuffer`, with copied `RecordData` sidecars, then recorder threads run them; `vk_runtime.cpp` records copies, resolves and transitions. `RecordOrdered` also orders host work. | A compact POD command stream and immutable sidecars, produced by the core and translated to native commands on recorder threads. Pass commands carry attachment load/store actions, views and render area. Keep ordered host work separate from GPU commands. |
+| Hazards | `texture_cache/image.cpp` tracks Vulkan image layouts and subresources; `vk_runtime.cpp`, `vk_rasterizer.cpp`, `vk_presenter.cpp` and `vk_scheduler.cpp` emit image/buffer barriers. `vk_barrier_tracker.cpp` tracks overlapping access ranges. | Core declares per-pass and per-command read/write access over exact image subresources or buffer byte ranges. Vulkan owns layout state, layout transitions and barrier selection/emission; Metal owns its synchronization. Only API-neutral dependency ordering can remain shared. |
 | Queue and presentation | `vk_scheduler.cpp` owns command recording segments and queue submit; `vk_semaphore.cpp` owns timeline waits; `vk_resource_pool.cpp` recycles command and descriptor pools; `vk_presenter.cpp` and `vk_swapchain.cpp` acquire, present and wait with semaphores/fences. | Recorder/queue submission, timeline-style completion values, swapchain acquire/present and retirement. |
 | Queries and diagnostics | `vk_timestamps.cpp` creates timestamp pools and reads results; `vk_gpu_profiler.cpp`, `vk_breadcrumbs.cpp` and `vk_gpu_labels.cpp` record diagnostics. | Optional timestamp and marker capabilities with explicit unsupported results. |
 
@@ -234,62 +234,119 @@ are a useful model for resource lifetime, command lists, queues and capability r
 | Dynamic rendering with explicit load actions | Partial. `setFramebuffer` plus clear calls allow plume's Metal backend to choose clear-on-load internally, but the public API does not express a load/store action per attachment, exact render area or a dynamic rendering pass. Its Vulkan backend uses `vkCmdBeginRenderPass`. This is insufficient for the accepted deferred-clear path without extending the contract. |
 | Tessellation | Missing. The public shader stages, pipeline topology and draw calls have no patch/control/evaluation stages or patch draw. N5 needs a constant factor buffer and post-tessellation vertex function for eligible fixed patches; Vulkan still needs native tessellation. |
 | Sparse or imported host memory | Missing from public resource creation and queue binding. The current runtime needs sparse arenas on some Vulkan devices and host-imported guest memory on macOS. |
-| MoltenVK interop during transition | Missing. There is no public native-handle/residency bridge for the current imported-memory and image-residency path. |
+| MoltenVK during transition | No cross-backend interop is required: one backend owns the frame from startup. MoltenVK residency and imported-memory details stay in Vulkan. |
 | Subresource barriers and exact image ranges | Partial. Texture views select subresources, but `RenderTextureBarrier` addresses a whole texture and has only a layout, not mip/layer/aspect and access scopes. |
+| Recording cost | Its command-list API is useful as a shape for explicit work, but this migration needs POD commands translated in batches on the existing recorder threads, without a virtual call per command. |
 
-**Proposed decision:** write a narrow project-owned interface in plume's explicit, capability-
+**Approved direction:** write a narrow project-owned interface in plume's explicit, capability-
 reported style. Do not adopt plume unchanged or fork its three backends: the missing pass,
 tessellation and guest-memory contracts cut across its public API and implementations. Reuse
 ideas, not source code, and keep the Vulkan adapter over the current renderer while N4 lands.
-This decision is awaiting review before renderer code is written.
+The detailed contract below is awaiting review before renderer code is written.
 
 ### Proposed contract
 
-- `Device` reports capabilities and creates opaque `Buffer`, `Image`, `ImageView`, `Sampler`,
-  `ShaderModule`, `Pipeline`, `ResourceTable` and `QueryPool` handles. Descriptions include usage,
-  formats, sample counts and precise view ranges. A memory-backing service provides ordinary,
-  sparse and host-imported resources where supported; device addresses are an optional
-  capability, not an assumption.
-- `CommandRecorder` records begin/end of a pass with render area and each attachment's view,
-  load action, clear value and store action; buffer/image barriers over exact ranges; copies,
-  resolves, bindings, draws (including patches), dispatches, timestamps and labels. The shared
-  frame planner chooses those operations; Vulkan maps them to dynamic rendering and barriers,
-  Metal maps them to render encoders and resource synchronization.
-- `Queue` submits recorders with waits/signals and an ordered completion value; swapchain
-  acquire/present and resource retirement use that value. GPU work remains ordered across the
-  existing graphics/compute/copy paths. The core does not see `Vk*`, `vk::*` or `MTL::*` types.
-- `ShaderPackage` pairs backend binaries (SPIR-V or MSL) with resource/stage reflection. A
-  tessellation capability describes native patch support; N5 may specialize the recognized
-  fixed factors to a constant Metal factor buffer. Unmatched shaders retain a defined fallback.
-- A private Vulkan/MoltenVK interop adapter retains current native handles and residency until
-  the Metal backend can own all needed resources. It is outside the shared contract, so it
-  cannot become a hidden Metal-only path through the core.
+- `Device` reports capabilities and creates opaque, generation-checked `Buffer`, `Image`,
+  `ImageView`, `Sampler`, `ShaderModule`, `Pipeline` and `QueryPool` handles. Descriptions include
+  usage, formats, sample counts and precise view ranges. A memory-backing service provides
+  ordinary, sparse and host-imported resources where supported; device addresses are an optional
+  capability. Vulkan's MoltenVK residency sets stay inside that backend.
+- **The recording boundary is a compact, backend-neutral POD command stream.** The core encodes
+  fixed-size opcode records for pass begin/end, binding changes, dynamic state, draw (including
+  patches), dispatch, copy, resolve, timestamps and labels. Variable-length attachment, region
+  and binding arrays live in immutable sidecar storage addressed by offset and count. Records
+  contain typed resource handles and values, not native handles, pointers or captured lambdas.
+  Chunks preserve producer order and pin referenced resources until GPU completion. The existing
+  recorder threads translate whole chunks with one backend selection at startup and a direct
+  opcode switch; there is no per-command virtual dispatch. Vulkan emits `vk::CommandBuffer`
+  operations, while N5's Metal backend emits native encoders. Ordered host actions such as
+  `RecordOrdered` remain in a separate sequenced lane with explicit synchronization points;
+  they are not serialized into GPU POD records.
+- **Access is part of the stream.** Each pass declares attachment and shader read/write uses;
+  each command that touches memory declares its read/write use with the exact image aspect,
+  mip and layer range or buffer byte range, plus the pipeline usage needed for synchronization.
+  The core may use these declarations to order work. The Vulkan backend owns the image layout
+  tracker now in `texture_cache/image.cpp`, chooses layouts and emits image/buffer barriers.
+  Metal translates the same access declarations into its own synchronization and encoder
+  boundaries. No Vulkan layout enum or barrier command appears in the shared stream.
+- **Bindings are flat, typed slots per draw or dispatch and shader stage.** Each binding record
+  names buffer (including offset and range), texture view, storage image and sampler slots directly.
+  This matches today's Vulkan push descriptors and Metal's direct buffer/texture/sampler slots;
+  it avoids a shared descriptor-table or argument-buffer update and a per-command dispatch cost.
+  The producer can encode only changed slots within a chunk. The backend validates slot limits
+  and keeps descriptor allocation or native binding calls private. Resource arrays occupy
+  consecutive slots; a shader that exceeds a backend limit needs an explicit capability path
+  or fallback, never a silent remap. In N2, the shader manifest assigns these logical slots
+  before SPIR-V and MSL generation. SPIRV-Cross's
+  [`MSLResourceBinding` mapping](https://github.com/KhronosGroup/SPIRV-Cross/blob/main/spirv_msl.hpp)
+  maps each SPIR-V set/binding and stage to `[[buffer(n)]]`, `[[texture(n)]]` and
+  `[[sampler(n)]]`; combined samplers split into texture and sampler slots. Start with
+  `argument_buffers = false`, reserve backend slots for push constants and internal data, and
+  verify reflected slot ranges and array collisions against the emitted MSL. Argument buffers
+  are a later backend extension only if a measured shader requires them; they are not the
+  shared binding model.
+- `Queue` submits translated chunks with waits/signals and an ordered completion value;
+  swapchain acquire/present and resource retirement use that value. A `ShaderPackage` pairs
+  backend binaries (SPIR-V or MSL) with stage and binding reflection. Native patch support is
+  reported as a capability. The core sees no `Vk*`, `vk::*` or `MTL::*` types.
+- **Backend selection occurs once at startup.** Vulkan, including MoltenVK on macOS, remains the
+  fallback while Metal is incomplete. There is no mixed-backend frame or private interop
+  adapter; each backend owns its resources, recording, residency and presentation.
 
 ### Migration order and measurements
 
-1. Record a baseline with the existing Vulkan backend: build/tests, one game run on each
-   available platform, FPS/p90/game CPU and a Metal trace on macOS (busy/idle, encoder classes
-   and 11.9 separate clear encoders per frame in the current clinic trace).
-2. Define opaque handles, capability and resource descriptions, then wrap today's Vulkan
-   allocation, views, samplers, sparse/host-import memory and device addresses. Keep the old
-   implementation underneath; compare its game run and resource counters before proceeding.
-3. Move pass descriptions, exact load actions, barriers, copies and resolves through the
-   recorder. Adapt `vk_scheduler.cpp` and `vk_runtime.cpp` without changing their queue policy;
-   compare render-pass and clear counts plus FPS/p90/CPU after this boundary.
-4. Move descriptor tables, pipeline creation and shader-module selection. Preserve the Vulkan
-   shader cache and native tessellation. Compare pipeline compile counts, graphics/compute
-   encoder counts and gameplay after this boundary.
-5. Move submission, timeline waits, query/marker and presentation behind queue and swapchain
-   interfaces. Validate ordering, frame pacing and captures; retire direct Vulkan calls from
-   shared code only after the Vulkan backend matches the baseline.
-6. In N5, add the Metal adapter against the same contract, starting with resources and simple
-   passes, then shaders/pipelines and native fixed-factor tessellation. Compare matching game
-   frames and measurements against the still-working Vulkan path at each usable slice.
+At **every** migration boundary, build and run the current Vulkan path, and compare alternating
+baseline/change runs at the same game location: FPS, frame-time p90, stage-B CPU time per draw
+(the log's `GPU thread us/draw`), and game CPU % (100% is one core). Parse stage-B time from the
+frame-stat log; the current bench summary omits it. Keep draw counts with these numbers so the
+per-draw cost is interpretable. Check game frames for visual differences and
+collect a Metal trace when an encoder or GPU-idle claim is made. Record regressions and negative
+results. Linux must compile at every boundary, even when only macOS can be measured locally.
 
-Each migration step stays independently buildable and playable. Do not advance to the next
-boundary after a visual, CPU, frame-time or GPU-idle regression without identifying it or
-explicitly accepting it. Only the Vulkan backend is available today for this check; Metal
-backend measurements begin in N5.
+1. Capture the pre-migration Vulkan baseline: build/tests, the game metrics above, and a Metal
+   trace on macOS (busy/idle, encoder classes, and the current 11.9 separate clear encoders per
+   frame). Preserve this run as the reference for each later slice.
+2. Define handles, capabilities and resource descriptions; wrap today's Vulkan allocation,
+   views, samplers, sparse/host-imported memory and device addresses. Keep current recording and
+   queue behavior under the wrapper; measure before proceeding.
+3. Replace `Scheduler::Record`'s `vk::CommandBuffer` lambdas and `RecordData` sidecars with the
+   POD stream and offset-based sidecars. First lower each existing operation to equivalent Vulkan
+   commands on the current recorder threads, keeping submission order and `RecordOrdered` host
+   actions. Then move pass/load descriptions, copies, resolves, bindings and exact access
+   declarations into the stream. Move image layout state out of `texture_cache/image.cpp` and
+   barrier emission into the Vulkan translator; compare pass/clear counts and the CPU gates after
+   each usable slice. This is the central N4 migration, not a new synchronous command path.
+4. Move pipeline creation and shader-module selection behind the interface. Preserve the Vulkan
+   shader cache, flat push-descriptor behavior and native tessellation; compare compile and
+   encoder counts as well as the common gates.
+5. Move submission, timeline waits, query/marker and presentation behind queue and swapchain
+   interfaces. Validate ordering and frame pacing; retire direct Vulkan calls from shared code
+   only after the Vulkan backend matches the baseline.
+6. In N5, implement Metal against the same stream and access contract: resources and simple
+   passes first, then shaders/pipelines and native fixed-factor tessellation. Select Metal at
+   startup only when its required capabilities and implementation are complete; otherwise select
+   the still-working Vulkan fallback.
+
+Each slice stays buildable and playable. Do not advance after a visual, stage-B CPU, game CPU,
+frame-time or GPU-idle regression without identifying it or explicitly accepting it.
+
+### Upstream bbport merges
+
+Moving `renderer_vulkan/`, `buffer_cache/` and `texture_cache/` behind this boundary will diverge
+from bbport's renderer, so later squashed bbport releases can conflict in scheduler, resource,
+pipeline and draw code. The merge policy needs a separate decision: keep an upstream-shaped
+Vulkan layer and adapt each release at the boundary, or port selected upstream renderer changes
+into the project-owned core and backend. Either path needs a record of upstream renderer changes,
+conflict review and the same build/visual/performance gates after each merge. Continue the
+existing release-merge procedure until the maintainer chooses how to reconcile the divergent
+renderer; this design makes no choice between those paths.
+
+### Linux build gate
+
+The app and runtime currently have only `.github/workflows/macos.yml`; neither builds Linux in
+CI. The smallest proposed addition is one runtime `ubuntu-latest` compile job: recursive checkout,
+install Nix, and run `nix-shell shell.nix --run 'bash build.sh'`. It needs no game dump or GPU run.
+Add it before the first N4 code slice so the non-Mac Vulkan path is checked on every change.
 
 N3 hooks the engine's own functions. With the recompiled library loaded, recompiled functions call
 each other directly and skip hooks, so the recompiler first has to send calls to hooked functions
