@@ -62,3 +62,11 @@ The macOS app (launcher, DMG, releases) is
 
 Upstream's GTK4 launcher (`bash launcher/bb-launcher.sh`) also works, with
 `brew install gtk4 libadwaita pygobject3`.
+
+## Opening-video release check on macOS
+
+Before a release, test both copied-save gameplay with `tools/test_run.sh` and the isolated
+new-save opening with `tools/test_opening_video.sh NAME`. The latter creates a fresh user
+directory, navigates setup with one Up press for Next, and reports whether playback completed.
+`VIDEO_GRAB=1` captures the game's frame at character creation. Tell the user before batches;
+check `pgrep -x bb-probe` first. Never use the real save directory or capture the user's screen.

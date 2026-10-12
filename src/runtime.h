@@ -98,6 +98,7 @@ void *runtime_low_map(size_t size, int prot);
 void runtime_native_load(uint64_t image_base);
 /* The game's command buffers: one writer at a time, BB_CB_PROBE=1 reports (runtime_cmdbuf.c). */
 void runtime_cmdbuf_load(uint64_t image_base);
+void runtime_cmdbuf_fault_report(void);
 uintptr_t runtime_ajm_resolve(const char *name);
 void runtime_ajm_report(void);
 uintptr_t runtime_audio_resolve(const char *name);

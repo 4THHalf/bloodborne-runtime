@@ -99,7 +99,19 @@ from renderer preparation; the opening-video fault remains open for investigatio
 A subsequent release comparison found that the same fault exists in v0.5.1: five alternating
 new-save movie trials faulted in 2/5 release and 4/5 current-main runs. These small counts do not
 identify a failure-rate regression. N4 is paused after its current slice while the older bug is
-investigated. The run table and GPU assertion inventory are in [Opening-video stability](STABILITY.md).
+investigated. A subsequent filtered write trace identified GXRenderThread resetting shared graphics
+input state during the movie's bind/draw/restore transaction. The default
+`BB_MOVIE_STATE_GUARD` protects movie frames and render task lists with the same buffer lock;
+`BB_MOVIE_STATE_GUARD=0` restores the old coverage. All 10 guarded openings completed (five
+portable, five translated); three of five alternating controls faulted. Character creation was
+checked with game-frame captures. No GPU assertions appeared in these acceptance trials.
+
+Three capped 40 FPS, untraced `HOLD=90` gameplay pairs had identical 25.0 ms p90. Mean CPU was
+395.7% off versus 397.7% on (about 0.5% higher); stage B averaged 3.69 versus 3.72 µs/draw.
+One uncapped pair measured 48.5/48.6 FPS, 21.7/21.6 ms p90 and 504/507% CPU. The fix is kept for
+stability with this small measured CPU cost. The run tables, diagnostic limits and GPU assertion
+inventory are in [Opening-video stability](STABILITY.md). Use `tools/test_opening_video.sh` for
+this fresh-save route; copied-save holds skip it.
 
 ### N4 Vulkan reference (2026-10-12)
 

@@ -2,9 +2,12 @@
 
 ## Status (2026-10-12)
 
-The new-save opening video can fault before character creation in released v0.5.1 as well as
-current main. N4 is paused after its first buffer-resource slice while this is investigated.
-The next app release needs a verified fix or an explicit known issue. No release has been tagged.
+The new-save opening video faults before character creation in released v0.5.1 and in main
+without the new state guard. A shared-state reset race has been identified and guarded. Five
+alternating controls produced three null faults; all five guarded trials completed playback.
+The guard is now the default. Five further translated-walker trials completed playback, and
+capped and uncapped gameplay gates passed with the small CPU cost recorded below.
+N4 remains paused after its first buffer-resource slice. No release has been tagged.
 
 ## Release versus main
 
@@ -52,7 +55,7 @@ the null fault; neither was retained. The wider placement coincided with the sta
 In the earlier ten-run translated/portable comparison, null faults occurred in 2/5 and 3/5
 trials, with one copy-shader assertion each way. Command-buffer probes saw the main and graphics
 threads use the same buffer close together, but no third movie-thread writer or overlapping
-buffer memory. A timing or shared-state race remains a hypothesis, not a confirmed cause.
+buffer memory. At that stage, a timing or shared-state race was a hypothesis, not a confirmed cause.
 
 ## GPU assertion inventory
 
@@ -101,7 +104,111 @@ The temporary probes were removed; no new guard or playback workaround was retai
 The next useful diagnostic must distinguish the state at the writer's load from the register
 value at the fault, while disturbing execution less than the entry probes. A guard should be
 extended only once its protected state and lock ordering are established; the previous wider
-guard experiment stalled. The root cause remains unresolved.
+guard experiment stalled. At that stage the root cause remained unresolved; the subsequent
+filtered write trace below identified the intervening reset.
+
+## Confirmed shared-state reset
+
+Five subsequent diagnostic trials (`faultstate1`, `faultstate2`, `bindtrace1`, `bindtrace2`,
+`bulktrace1`) reproduced the null fault. Fault-only reads first established the exact
+instruction and that the input binding could change between the fault and inspection.
+Filtered inline load/store recording then captured the main thread installing the movie's
+valid binding and later loading zero from the same address. Host memory-write recording
+identified the intervening operation: GXRenderThread cleared the shared graphics input state
+with memset while executing a render task list. In `bulktrace1`, that reset was recorded about
+33 microseconds after the movie's binding store and about 105 microseconds before its load.
+Counter frequency was verified locally; record timestamps are taken after accesses and do not
+freeze the other threads.
+
+This establishes a shared-state race for the captured null fault. It does not establish the
+cause of the independent copy-shader and surface-format assertions.
+The movie source binding was initialized in this capture. Packet-method locks do not
+protect the state snapshot, direct binding stores, state reset and restoration around draws.
+
+The candidate `BB_MOVIE_STATE_GUARD=1` guards two complete transactions using the existing
+recursive lock for their graphics command buffer: a movie frame and a render task-list
+execution. Both include state updates and draws; the task-list scope includes the bulk reset.
+The context reaches these functions through different arguments, so each resolves the correct
+context before choosing the lock.
+
+Five untraced pairs alternated the guard off/on with the portable walker. The controls had
+two main-thread null reads at `0xd2`, one graphics-thread null read at address zero and two
+completed videos. All five guarded runs completed playback without faults, stalls or GPU
+assertions. Game-frame captures in the first and last guarded runs verified the Contract
+character-creation screen. The guard is now the default; `BB_MOVIE_STATE_GUARD=0` restores the
+old packet-method coverage. The existing `BB_CB_GUARD=0` disables all these guards.
+
+| Pair | Guard off | Result | Guard on | Result |
+|---|---|---|---|---|
+| 1 | `txn_off1` (`1012_194409`) | Null read; main | `txn_on1` (`1012_194528`) | Completed; Contract screen checked |
+| 2 | `txn_off2` (`1012_194843`) | Null read; main | `txn_on2` (`1012_195013`) | Completed |
+| 3 | `txn_off3` (`1012_195306`) | Completed | `txn_on3` (`1012_195558`) | Completed |
+| 4 | `txn_off4` (`1012_195849`) | Null read; GXRenderThread | `txn_on4` (`1012_200003`) | Completed |
+| 5 | `txn_off5` (`1012_200254`) | Completed | `txn_on5` (`1012_200548`) | Completed; Contract screen checked |
+
+Five further default-guard trials with `BB_SRT_INTERP=0` completed playback: `fallback1`
+(`1012_201127`), `fallback2` (`1012_201418`), `fallback3` (`1012_201710`), `fallback4`
+(`1012_202002`) and `fallback5` (`1012_202257`). The last used the reusable
+`tools/test_opening_video.sh` and a game-frame capture verified character creation. In total,
+all **10/10 guarded openings** completed, against **3/5 faults in the alternating controls**.
+No copy-shader or surface-format assertion appeared in these fifteen acceptance trials.
+These counts measure this opening route, not every movie or the direct calls made by the
+optional recompiled game library. The latter still needs guard-aware calls, as already required
+by the recompiler's R5 work.
+
+### Gameplay cost
+
+Three off/on pairs used the copied current save in Central Yharnam, without tracing, `HOLD=90`
+and `BB_FPS_LIMIT=40`. All six measured 40.0 FPS and 25.0 ms frame-time p90, with about 1,268
+draws/frame. Stage-B values below average the last 18 frame-stat windows; CPU percentages are
+the benchmark's averages of one core. Neither build faulted or asserted.
+
+| Pair | Off game CPU | On game CPU | Off GPU thread µs/draw | On GPU thread µs/draw |
+|---|---:|---:|---:|---:|
+| `statecpu_off1` / `statecpu_on1` | 396% | 395% | 3.75 | 3.79 |
+| `statecpu_off2` / `statecpu_on2` | 396% | 400% | 3.66 | 3.69 |
+| `statecpu_off3` / `statecpu_on3` | 395% | 398% | 3.65 | 3.69 |
+
+Mean CPU was 395.7% off and 397.7% on: a measured increase of 2.0 percentage points of one core,
+about 0.5% relative. Stage B increased about 0.04 µs/draw (1.0%). FPS and p90 were unchanged.
+The fix is kept for stability; its measured cost is recorded rather than rounded to zero.
+
+One additional untraced uncapped pair checked that the limit was not hiding a throughput loss:
+
+| Run | FPS | Frame-time p90 | Game CPU | GPU thread µs/draw |
+|---|---:|---:|---:|---:|
+| `statefull_off` (`1012_204249`) | 48.5 | 21.7 ms | 504% | 4.37 |
+| `statefull_on` (`1012_204500`) | 48.6 | 21.6 ms | 507% | 4.39 |
+
+Both completed without faults or assertions. The small differences are one pair's results,
+not evidence of a speed gain.
+
+### Repeatable opening-video check
+
+On macOS, run `tools/test_opening_video.sh NAME [VAR=VALUE...]`. It delegates to
+`tools/test_run.sh`, creates a fresh isolated user directory and refuses to reuse it, stamps
+source revisions/diff hashes and host-binary hashes, and uses one Up press to reach Next in
+setup. The isolated directory override is last, so caller switches cannot redirect writes to
+the real save. `VIDEO_GRAB=1` captures the game's frame after natural playback completion.
+The script returns failure for a fault or incomplete playback, and separately identifies
+navigation attempts that never entered the movie. Tell the user before batches and check
+`pgrep -x bb-probe` first. Never capture the user's screen.
+
+The user reported poor video frame rate before crashes. The last pacing windows in
+`faultstate1` and `faultstate2` had p99 values of 118.05 and 51.36 ms. Cold pipeline compilation
+still causes hitches: one guarded movie window compiled two pipelines for 348.1 ms and reported
+a 403.0 ms worst frame. The state guard addresses the captured null fault; these observations
+do not establish that all playback pacing problems are solved.
+
+The optional diagnostics are `BB_JIT_FAULT_MAP=1` (exact instruction mapping without added
+execution instructions), `BB_JIT_WATCH` (filtered inline loads/stores plus host memory writes),
+`BB_FAULT_READS` (safe pointer-chain reads after a fault), and `BB_WRITE_LOG_ADDRESS` (a complete-
+qword filter for the existing GPU write log). The GPU write log found no full-qword writes
+covering the watched field in `bulktrace1`. Run metadata stamps source revisions and local-diff hashes; diagnostic
+output and private analysis stay outside Git and the wiki. The synthetic CPU tests cover exact
+fault mapping, slow accesses, watched values and ring wrap. This version of the CPU code passed
+4,000 interpreter/JIT comparison cases and 6,018 instruction fuzz cases with zero failures or
+crashes; runtime tests also pass.
 
 ## Investigation boundary
 

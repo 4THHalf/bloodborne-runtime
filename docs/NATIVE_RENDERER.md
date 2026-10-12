@@ -78,7 +78,9 @@ Each bar has 20 blocks, one per 5%. Percentages track the accepted scope of each
 remaining time. N1 is closed: deferred clears are accepted, fixed-quad triangles were measured
 and left opt-in, and extra copy grouping showed no gain. N4's interface design is approved;
 Linux CI passes and the first buffer-resource slice is opt-in with its game measurements checked.
-N4 is paused after that slice for [opening-video stability](STABILITY.md).
+N4 remains paused after that slice. The [opening-video state race](STABILITY.md) is now guarded;
+10 guarded openings completed and capped/uncapped gameplay gates passed. This fix does not
+advance the renderer migration.
 
 | Step | Progress | Next deliverable |
 |---|---|---|

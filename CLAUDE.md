@@ -74,17 +74,23 @@ trials, plus one stalled guard experiment. Main and GXRenderThread have faulted;
 comparison's named faults were on main. The earlier command-buffer probes found those two
 users of the main buffer, no third movie-thread writer and no overlapping buffer memory.
 Wider and narrower guards did not remove the fault, so neither was retained.
-Four subsequent binding-state diagnostic trials completed playback without capturing an invalid
-binding. Those probes changed timing and translation boundaries and were removed; they are not
-a fix. Caller analysis points to shared graphics state around the movie draw, but neither its
-ordering nor CPU translation behavior has been established as the cause.
+Four initial binding-state probe trials completed without capturing the cause; those probes
+were removed. A subsequent filtered load/store and host-write trace caught GXRenderThread
+clearing the shared graphics input state while main had installed the movie binding. Movie
+frames and render task-list executions now hold the same buffer lock across their state changes
+and draws (`BB_MOVIE_STATE_GUARD=0`: old coverage). All 10 guarded openings completed, versus
+3/5 faults in alternating controls. Capped 40 FPS gameplay CPU averaged 395.7/397.7% off/on;
+uncapped FPS was 48.5/48.6 in one pair. These guards cover translated calls; direct calls in the
+optional recompiled library still need guard-aware dispatch. N4 remains paused after its slice.
+Use `tools/test_opening_video.sh NAME [VAR=VALUE...]` for release QA of this isolated new-save
+route. It uses one Up press for Next. The ordinary copied-save holds skip the movie.
 
 Three logs contain `GPU [Debug] <Critical> vk_shader_hle.cpp:242 ExecuteCopyShaderHLE: Assertion Failed!`:
 `n4_trace_on` while loading, and `video_on1`/`video_off2` during playback. One `r5scope` log
 contains `Unknown data_format=6 and num_format=1`; one `n4_baseline` log contains
 `Unknown data_format=15 and num_format=4`. Build/mode details and run timestamps are in the
-stability document. None of these GPU assertions recurred in the release/main batch. Keep
-counting them. Do not record guest code or memory in docs or commits.
+stability document. None of these GPU assertions recurred in the release/main comparison or the video-fix
+acceptance and gameplay batches. Keep counting them. Do not record guest code or memory in docs or commits.
 
 ## Upstream merges
 

@@ -77,6 +77,7 @@ static void attach(GuestThread *t) {
     bb_guest_tls_set(tcb);
     if (bbcpu_enabled()) bbcpu_set_thread_pointer((uintptr_t)tcb);
     current=t;
+    bbcpu_set_thread_label(t->name);
 }
 static GuestThread *new_thread(void) {
     GuestThread *t=calloc(1,sizeof(*t));
@@ -103,10 +104,12 @@ GuestThread *runtime_thread_current(void) {
 void runtime_thread_attach_host(const char *name) {
     GuestThread *t=runtime_thread_current();
     snprintf(t->name,sizeof(t->name),"%s",name ? name : "host");
+    bbcpu_set_thread_label(t->name);
 }
 void runtime_thread_attach_main(void) {
     GuestThread *t=runtime_thread_current();
     snprintf(t->name,sizeof(t->name),"main");
+    bbcpu_set_thread_label(t->name);
 }
 /* The guest name of this thread ("" before it ran guest code). */
 const char *runtime_thread_name(void) { return current ? current->name : ""; }
@@ -325,7 +328,7 @@ static ABI int32_t thread_rename(GuestThread *t,const char *name) {
     if (!find_thread(t)) return ERR(3);
     if (!name) return ERR(22);
     snprintf(t->name,sizeof(t->name),"%s",name);
-    if (t==current) set_host_name(t->name);
+    if (t==current) { set_host_name(t->name); bbcpu_set_thread_label(t->name); }
     return 0;
 }
 static ABI int32_t thread_equal(GuestThread *a,GuestThread *b) { return a==b; }
