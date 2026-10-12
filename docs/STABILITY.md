@@ -210,6 +210,23 @@ fault mapping, slow accesses, watched values and ring wrap. This version of the 
 4,000 interpreter/JIT comparison cases and 6,018 instruction fuzz cases with zero failures or
 crashes; runtime tests also pass.
 
+### White flashes during opening-video playback
+
+On 2026-10-12, the maintainer reported two bright white flashes in the prerecorded opening
+video before character creation during launcher playtesting. Playback finished. This is a
+visual defect report, not a reproduced crash or a verified fix. The exact playtest binary and
+switches were not stamped by the isolated test harness. A read-only check of the current
+launcher `last.log` found playback start/stop messages and neither watched GPU assertion;
+that log alone cannot establish the cause or identify the flashed frames.
+
+The earlier stale-constant cutscene fix already leaves `BB_PIPELINED_WRITE_DATA` off by
+default. Do not assume this report has the same cause. First compare isolated openings with
+`BB_DEFER_CLEARS=0` and `BB_DEFER_CLEARS=1`, alternating, with the maintainer watching and
+recording the flash count. Keep the movie-state guard enabled in both modes. If flashes remain
+in both, compare draw preparation synchronously against the default pipeline, then investigate
+video upload/invalidation and presentation ordering. Successful playback and crash-free runs
+are insufficient to accept a visual fix. N4 remains paused.
+
 ## Investigation boundary
 
 Use Ghidra to understand the null pointer's callers and the state they read, then check the

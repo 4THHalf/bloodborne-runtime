@@ -92,6 +92,11 @@ contains `Unknown data_format=6 and num_format=1`; one `n4_baseline` log contain
 stability document. None of these GPU assertions recurred in the release/main comparison or the video-fix
 acceptance and gameplay batches. Keep counting them. Do not record guest code or memory in docs or commits.
 
+The maintainer also reported two bright white flashes in the opening video before character
+creation on 2026-10-12; playback completed. This visual defect is unresolved. Stability docs
+record the report and proposed observed A/B checks; do not infer visual correctness from
+crash-free playback.
+
 ## Upstream merges
 
 bbport releases come as squashed commits; remote `upstream`
