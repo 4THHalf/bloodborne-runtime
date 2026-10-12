@@ -97,23 +97,25 @@ captures from the same place showed no visible difference. The default remains o
 Measuring: the GPU timestamp profiler does not work on MoltenVK, and `ioreg`'s "Device
 Utilization" overstates how busy the GPU is; use Metal System Traces (`TRACE=1` in
 `tools/mac_bench.sh`, read with `tools/mst_summary.py` / `tools/mst_passes.py` /
-`tools/mst_shaders.py`; `xctrace` needs `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`).
+`tools/mst_shaders.py`; `xctrace` needs
+`DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`). Three-second recordings took over
+a minute to finalize after the time limit; wait for the saved-output message before reading the
+trace.
 
 ## Where more could be gained
 
 1. **Idle time between Metal encoders, 6–8 ms a frame at 1080p.** Each switch between render,
    compute and blit work leaves the GPU idle (~630 encoders a frame).
-   - The game's tessellated light draws (~48 a frame) become a compute pass plus a render-pass
-     restart each on MoltenVK: ~2–3 ms (removing them entirely: 31 → 34 FPS). Their hull shader
-     uses constant factors (outer 3, inner 1), so they could be pre-tessellated into ordinary
-     triangles (merging the LS, HS and DS stages in the recompiler). An opt-in fixed-quad
-     triangle path (`BB_FIXED_QUAD_TRIANGLES=1`) converted the observed draws and improved
-     mean FPS in two alternating 60-second pairs, but p90 worsened in both and game CPU use
-     rose by 30–38 percentage points. It remains off by default pending a CPU fix and a valid
-     Metal trace.
-   - Deferred color clears initially removed 3–4 separate clear encoders a frame in the clinic.
-     The narrowed upscaler check removes more, but encoder counts have not been retraced.
-   - Small buffer copies between passes (~1–1.5 ms): batch further.
+   - A three-second off/on trace pair for the opt-in fixed-quad triangle path removed 27.4
+     light-draw tessellation compute encoders per frame (0.188 ms of compute work); 22.0 other
+     tessellation encoders remained. Total idle was 6.0/5.3 ms per frame, but between-command-
+     buffer idle rose from 0.6 to 1.2 ms. Two untraced pairs had worse p90 and 30–38 percentage
+     points more game CPU use with the switch on. Leave `BB_FIXED_QUAD_TRIANGLES=1` opt-in;
+     native Metal tessellation is planned for N5.
+   - With deferred clears enabled by default, a later three-second clinic trace measured 11.9
+     separate `vkCmdClearColorImage` encoders per frame (0.33 ms of GPU work). The earlier
+     default-off clear traces had 17.8 and 16.8; this later trace is not a controlled pair.
+   - Buffer-copy grouping had no measured gain; the existing copy hoist remains.
 2. **Vertex work, ~6 ms a frame at native.** Vertex shaders read constants from storage buffers
    one value at a time; uniformly indexed read-only buffers declared as constant buffers might
    let Metal preload them. Some tiny passes (32×32, 64×64, 256×256 targets) are almost only
