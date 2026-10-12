@@ -76,8 +76,8 @@ GPU's idle time and in what each pass costs.
 
 Each bar has 20 blocks, one per 5%. Percentages track the accepted scope of each step, not
 remaining time. N1 is closed: deferred clears are accepted, fixed-quad triangles were measured
-and left opt-in, and extra copy grouping showed no gain. N4 has a design proposal for review;
-renderer implementation has not started.
+and left opt-in, and extra copy grouping showed no gain. N4's interface design is approved; its
+Linux gate and pre-migration baseline are being checked before renderer implementation.
 
 | Step | Progress | Next deliverable |
 |---|---|---|
@@ -85,7 +85,7 @@ renderer implementation has not started.
 | N1 · frame planning measurements | 100% `████████████████████` | Closed; native tessellation planned for N5 |
 | N2 · shaders ahead of time | 0% `░░░░░░░░░░░░░░░░░░░░` | Inventory shader variants |
 | N3 · textures as objects | 0% `░░░░░░░░░░░░░░░░░░░░` | Trace texture creation sites |
-| N4 · backend interface | 0% `░░░░░░░░░░░░░░░░░░░░` | Review design, then move Vulkan behind it |
+| N4 · backend interface | 5% `█░░░░░░░░░░░░░░░░░░░` | Verify Linux CI, then begin resource wrapper |
 | N5 · Metal backend | 0% `░░░░░░░░░░░░░░░░░░░░` | Implement the interface after N4 |
 | N6 · engine render boundary | 0% `░░░░░░░░░░░░░░░░░░░░` | Map engine calls after R4 |
 
@@ -109,7 +109,7 @@ N1 decisions:
 | N1 | Measure frame planning changes in today's renderer | all | Closed (2026-10-12): clears accepted; tessellation moved to N5; copies unchanged |
 | N2 | Shaders ahead of time: every shader in the game's files converted at install (SPIR-V; MSL with N5) | all | |
 | N3 | Textures as objects: created when the game creates them (libGnm texture setup, the engine's texture loader), detiled once at install | all | |
-| N4 | The backend interface: the Vulkan-specific code of the renderer behind it | all | Design proposed for review; no renderer code yet |
+| N4 | The backend interface: the Vulkan-specific code of the renderer behind it | all | Design approved; baseline measured, Linux CI being fixed before renderer code |
 | N5 | The Metal backend, replacing MoltenVK | macOS | |
 | N6 | The engine's own render layer as the boundary (needs R4's names and structures) | all | |
 
@@ -195,9 +195,9 @@ it; the runs varied more than the apparent reduction. The level holds were 46.7 
 without grouping, and 46.3 and 47.7 FPS with it (the latter trace failed). Further copy work
 needs to reduce render-pass breaks or measured idle, not just command calls.
 
-## N4 backend interface design (proposal for review, 2026-10-12)
+## N4 backend interface design (approved, 2026-10-12)
 
-This is a design review boundary. No renderer implementation has started. The inventory covers
+The design is approved; no renderer implementation has started. The inventory covers
 `renderer_vulkan/` and the buffer and texture caches that own Vulkan resources outside it. The
 existing Vulkan path remains the reference implementation while its calls move behind the
 interface. No Metal-specific type or policy belongs in the shared core.
@@ -242,21 +242,27 @@ are a useful model for resource lifetime, command lists, queues and capability r
 reported style. Do not adopt plume unchanged or fork its three backends: the missing pass,
 tessellation and guest-memory contracts cut across its public API and implementations. Reuse
 ideas, not source code, and keep the Vulkan adapter over the current renderer while N4 lands.
-The detailed contract below is awaiting review before renderer code is written.
 
-### Proposed contract
+### Approved contract
 
 - `Device` reports capabilities and creates opaque, generation-checked `Buffer`, `Image`,
   `ImageView`, `Sampler`, `ShaderModule`, `Pipeline` and `QueryPool` handles. Descriptions include
   usage, formats, sample counts and precise view ranges. A memory-backing service provides
   ordinary, sparse and host-imported resources where supported; device addresses are an optional
-  capability. Vulkan's MoltenVK residency sets stay inside that backend.
+  capability. Vulkan's MoltenVK residency sets stay inside that backend. Destruction invalidates
+  the generation-checked handle immediately. The backend defers physical release until the
+  completion value of the last submitted chunk that could reference it; the core does not take
+  a reference count for each command.
 - **The recording boundary is a compact, backend-neutral POD command stream.** The core encodes
   fixed-size opcode records for pass begin/end, binding changes, dynamic state, draw (including
   patches), dispatch, copy, resolve, timestamps and labels. Variable-length attachment, region
   and binding arrays live in immutable sidecar storage addressed by offset and count. Records
-  contain typed resource handles and values, not native handles, pointers or captured lambdas.
-  Chunks preserve producer order and pin referenced resources until GPU completion. The existing
+  contain typed resource handles and values, not native handles or pointers. Chunks preserve
+  producer order. During the incremental migration, one temporary escape opcode may carry a
+  legacy `Scheduler::Record` lambda in Vulkan-only sidecar storage. Only the Vulkan translator
+  executes it; the Metal backend cannot accept an escape chunk. Count remaining escape sites
+  after each slice, and remove the opcode and all lambdas before N5 begins. The final stream is
+  POD only. The existing
   recorder threads translate whole chunks with one backend selection at startup and a direct
   opcode switch; there is no per-command virtual dispatch. Vulkan emits `vk::CommandBuffer`
   operations, while N5's Metal backend emits native encoders. Ordered host actions such as
@@ -309,13 +315,17 @@ results. Linux must compile at every boundary, even when only macOS can be measu
 2. Define handles, capabilities and resource descriptions; wrap today's Vulkan allocation,
    views, samplers, sparse/host-imported memory and device addresses. Keep current recording and
    queue behavior under the wrapper; measure before proceeding.
-3. Replace `Scheduler::Record`'s `vk::CommandBuffer` lambdas and `RecordData` sidecars with the
-   POD stream and offset-based sidecars. First lower each existing operation to equivalent Vulkan
-   commands on the current recorder threads, keeping submission order and `RecordOrdered` host
-   actions. Then move pass/load descriptions, copies, resolves, bindings and exact access
+3. Introduce the POD stream beside `Scheduler::Record` and lower operations incrementally. The
+   temporary Vulkan-only escape opcode carries remaining lambdas while each operation moves to
+   an equivalent Vulkan translation on the current recorder threads. Keep submission order and
+   `RecordOrdered` host actions. Count escape sites after each slice; the starting source
+   inventory has 59 direct `Record`/`RecordWithBreadcrumbs` lambda call sites in `video_core/`
+   (the actual escape count is measured when the stream is introduced). Then move pass/load
+   descriptions, copies, resolves, bindings and exact access
    declarations into the stream. Move image layout state out of `texture_cache/image.cpp` and
    barrier emission into the Vulkan translator; compare pass/clear counts and the CPU gates after
-   each usable slice. This is the central N4 migration, not a new synchronous command path.
+   each usable slice. Reach zero escapes and remove the opcode before N5. This is the central N4
+   migration, not a new synchronous command path.
 4. Move pipeline creation and shader-module selection behind the interface. Preserve the Vulkan
    shader cache, flat push-descriptor behavior and native tessellation; compare compile and
    encoder counts as well as the common gates.
@@ -330,23 +340,40 @@ results. Linux must compile at every boundary, even when only macOS can be measu
 Each slice stays buildable and playable. Do not advance after a visual, stage-B CPU, game CPU,
 frame-time or GPU-idle regression without identifying it or explicitly accepting it.
 
+### Step 1 reference (2026-10-12)
+
+The pre-migration Vulkan path built and passed `bash build.sh --test` on macOS. In the copied
+Central Yharnam save, a 45-second level hold with the portable SRT walker as the arm64 default
+completed 1,880 frames: 43.7 FPS by frame times, 21.4 ms median, 26.2 ms p90, 494% game CPU,
+and 1,268 draws/frame. The last nine frame-stat windows averaged 4.89 µs/draw on the stage-B
+GPU thread. A game-frame capture at the same location showed the expected scene. This is the
+reference for the first N4 resource slice; later slices need alternating baseline/change runs
+because one hold does not establish run-to-run variance.
+
+A separate five-second Metal trace of the same scene, taken before the walker-default change,
+covered about 242 frames. It measured 11.6 ms/frame GPU busy, 3.8 ms idle inside command
+buffers and 5.4 ms idle between buffers, with about 156.5 render, 61.8 dispatch, 47.6 buffer
+copy, 36.2 tessellation compute and 9.0 separate color-clear encoders per frame. The game later
+stopped on an `Unknown data_format=15 and num_format=4` assertion, so the trace is an encoder
+inventory, not a clean performance comparison. A replacement trace stalled in `xctrace` after
+its capture limit; its game hold completed and supplied the CPU and frame-time baseline above.
+
 ### Upstream bbport merges
 
-Moving `renderer_vulkan/`, `buffer_cache/` and `texture_cache/` behind this boundary will diverge
-from bbport's renderer, so later squashed bbport releases can conflict in scheduler, resource,
-pipeline and draw code. The merge policy needs a separate decision: keep an upstream-shaped
-Vulkan layer and adapt each release at the boundary, or port selected upstream renderer changes
-into the project-owned core and backend. Either path needs a record of upstream renderer changes,
-conflict review and the same build/visual/performance gates after each merge. Continue the
-existing release-merge procedure until the maintainer chooses how to reconcile the divergent
-renderer; this design makes no choice between those paths.
+The renderer diverges from bbport when N4 code starts. Non-renderer parts of later bbport
+releases (runtime, patches, scripts, game settings and launcher) keep merging as before.
+Renderer changes in `renderer_vulkan/`, `buffer_cache/`, `texture_cache/` and
+`shader_recompiler/` are reviewed release by release and ported by hand into the shared core or
+Vulkan backend when useful. Record each decision in [the renderer port log](upstream/RENDERER_PORTS.md),
+then apply the same build, visual and performance gates. Before the first N4 code slice, the
+upstream remote was checked on 2026-10-12: its HEAD is the 0.51 release commit
+`3c57da4198ad62039f63f33bfd205b9916518acf`; there is no newer release to merge.
 
 ### Linux build gate
 
-The app and runtime currently have only `.github/workflows/macos.yml`; neither builds Linux in
-CI. The smallest proposed addition is one runtime `ubuntu-latest` compile job: recursive checkout,
-install Nix, and run `nix-shell shell.nix --run 'bash build.sh'`. It needs no game dump or GPU run.
-Add it before the first N4 code slice so the non-Mac Vulkan path is checked on every change.
+The runtime now has `.github/workflows/linux.yml`: one `ubuntu-latest` compile job with a
+recursive checkout, Nix and `nix-shell shell.nix --run 'bash build.sh'`. It needs no game dump or
+GPU run. The job must pass before the first N4 renderer code slice and at each later boundary.
 
 N3 hooks the engine's own functions. With the recompiled library loaded, recompiled functions call
 each other directly and skip hooks, so the recompiler first has to send calls to hooked functions
