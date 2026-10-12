@@ -72,6 +72,37 @@ Both assertion types are followed by `STOP: GPU library assertion failed (see GP
 Their relationship to the opening-video null fault is not established. Keep counting them by
 build and run during the investigation.
 
+## Caller and state investigation
+
+Read-only Ghidra analysis followed the movie update through its draw wrapper to the graphics
+state writer that faults. The movie installs a source binding in the shared graphics context,
+draws, then restores the previous state. The main and graphics threads both use that context.
+The existing command-buffer lock protects packet methods; this alone does not establish the
+ordering of the surrounding state updates. No incorrect PS4 library return value has been
+identified. The AvPlayer frame retrieval path was checked, but this does not prove all playback
+contracts are correct.
+
+Four additional isolated movie trials used temporary binding-state probes on current main:
+
+| Run | Walker | Probe version | Result |
+|---|---|---|---|
+| `stab_probe_portable` (`1012_153404`) | Portable | Entry, draw and setter probes with normal-state logging | Playback completed |
+| `stab_probe_translated` (`1012_153841`) | Translated | Added state-writer entry probe; normal-state logging | Playback completed |
+| `stab_probe_light1` (`1012_154434`) | Portable | Same sites; log invalid states only, direct atomic reads | Playback completed |
+| `stab_probe_light2` (`1012_154956`) | Translated | Same lightweight probes | Playback completed |
+
+The source binding was initialized in the sampled normal calls. No invalid binding was
+reported, and no copy-shader or surface-format assertion appeared in these four runs. The
+diagnostics changed between the first two trials and change timing and translation boundaries,
+so these are investigation results, not a controlled failure-rate comparison or a verified fix.
+They leave both a shared-state ordering problem and CPU translation behavior to investigate.
+The temporary probes were removed; no new guard or playback workaround was retained.
+
+The next useful diagnostic must distinguish the state at the writer's load from the register
+value at the fault, while disturbing execution less than the entry probes. A guard should be
+extended only once its protected state and lock ordering are established; the previous wider
+guard experiment stalled. The root cause remains unresolved.
+
 ## Investigation boundary
 
 Use Ghidra to understand the null pointer's callers and the state they read, then check the

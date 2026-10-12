@@ -74,6 +74,10 @@ trials, plus one stalled guard experiment. Main and GXRenderThread have faulted;
 comparison's named faults were on main. The earlier command-buffer probes found those two
 users of the main buffer, no third movie-thread writer and no overlapping buffer memory.
 Wider and narrower guards did not remove the fault, so neither was retained.
+Four subsequent binding-state diagnostic trials completed playback without capturing an invalid
+binding. Those probes changed timing and translation boundaries and were removed; they are not
+a fix. Caller analysis points to shared graphics state around the movie draw, but neither its
+ordering nor CPU translation behavior has been established as the cause.
 
 Three logs contain `GPU [Debug] <Critical> vk_shader_hle.cpp:242 ExecuteCopyShaderHLE: Assertion Failed!`:
 `n4_trace_on` while loading, and `video_on1`/`video_off2` during playback. One `r5scope` log
