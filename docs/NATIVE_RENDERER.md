@@ -78,6 +78,7 @@ Each bar has 20 blocks, one per 5%. Percentages track the accepted scope of each
 remaining time. N1 is closed: deferred clears are accepted, fixed-quad triangles were measured
 and left opt-in, and extra copy grouping showed no gain. N4's interface design is approved;
 Linux CI passes and the first buffer-resource slice is opt-in with its game measurements checked.
+N4 is paused after that slice for [opening-video stability](STABILITY.md).
 
 | Step | Progress | Next deliverable |
 |---|---|---|
@@ -85,7 +86,7 @@ Linux CI passes and the first buffer-resource slice is opt-in with its game meas
 | N1 · frame planning measurements | 100% `████████████████████` | Closed; native tessellation planned for N5 |
 | N2 · shaders ahead of time | 0% `░░░░░░░░░░░░░░░░░░░░` | Inventory shader variants |
 | N3 · textures as objects | 0% `░░░░░░░░░░░░░░░░░░░░` | Trace texture creation sites |
-| N4 · backend interface | 10% `██░░░░░░░░░░░░░░░░░░` | Wire handle lifetime and imported backing |
+| N4 · backend interface | 10% `██░░░░░░░░░░░░░░░░░░` | Paused: opening-video stability |
 | N5 · Metal backend | 0% `░░░░░░░░░░░░░░░░░░░░` | Implement the interface after N4 |
 | N6 · engine render boundary | 0% `░░░░░░░░░░░░░░░░░░░░` | Map engine calls after R4 |
 
@@ -109,7 +110,7 @@ N1 decisions:
 | N1 | Measure frame planning changes in today's renderer | all | Closed (2026-10-12): clears accepted; tessellation moved to N5; copies unchanged |
 | N2 | Shaders ahead of time: every shader in the game's files converted at install (SPIR-V; MSL with N5) | all | |
 | N3 | Textures as objects: created when the game creates them (libGnm texture setup, the engine's texture loader), detiled once at install | all | |
-| N4 | The backend interface: the Vulkan-specific code of the renderer behind it | all | First buffer-resource slice opt-in; game gates pass in the measured scene |
+| N4 | The backend interface: the Vulkan-specific code of the renderer behind it | all | Paused after first buffer-resource slice for opening-video stability |
 | N5 | The Metal backend, replacing MoltenVK | macOS | |
 | N6 | The engine's own render layer as the boundary (needs R4's names and structures) | all | |
 

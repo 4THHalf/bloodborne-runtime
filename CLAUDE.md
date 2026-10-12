@@ -53,6 +53,7 @@ N0–N6, N0 and N1 done). Multiplatform: shared core, Vulkan and Metal backends;
 N4's design is approved and Linux CI passes. The first buffer-resource slice is opt-in
 (`BB_N4_BUFFER_DESC=1`); uncapped and capped A/B game gates pass in Central Yharnam. Handle
 issuance, completion-based retirement and imported backing are next.
+N4 is paused after this slice at the maintainer's request: opening-video stability comes first.
 
 ## Rendering bugs
 
@@ -65,18 +66,21 @@ If a game run hangs in an indirect dispatch, first retry with `BB_INDIRECT_GUARD
 Bloodborne-Android reported a hang after a few minutes with upstream's guard enabled on its
 device. This has not been observed here.
 
-The isolated new-save opening video faulted at the same null read (address `0xd2`) with both SRT
-walkers: 2/5 translated and 3/5 portable runs on 2026-10-12. One run each way stopped at
-`GPU [Debug] <Critical> vk_shader_hle.cpp:242 ExecuteCopyShaderHLE: Assertion Failed!`
-instead. The faulting thread was main or GXRenderThread; command-buffer
-probes in two runs each way saw those two users of the main buffer, no third movie-thread writer
-and no overlapping buffer memory. Wider and narrower command-buffer guards did not remove the
-fault, and the wider guard coincided with a stall. The portable walker is now the arm64 default
-because the failure reproduces with the translated walker; `BB_SRT_INTERP=0` selects the old
-one. The opening-video fault remains unresolved; a timing race is a hypothesis. A separate Central Yharnam baseline stopped at
-`SurfaceFormat: Unknown data_format=15 and num_format=4`; watch for recurrence alongside the
-earlier one-off `data_format=6 and num_format=1`. Do not record guest code or memory in docs or
-commits.
+`docs/STABILITY.md` records the opening-video watch list. On 2026-10-12, five alternating
+isolated new-save trials each reproduced the same null-read fault (address `0xd2`) in released
+v0.5.1 (2/5, runtime `0d7e88d`) and current main (4/5, `727c2b2`). It is an older bug; later
+changes might affect its likelihood. Earlier development logs have 11 crashes in 17 movie
+trials, plus one stalled guard experiment. Main and GXRenderThread have faulted; the new release
+comparison's named faults were on main. The earlier command-buffer probes found those two
+users of the main buffer, no third movie-thread writer and no overlapping buffer memory.
+Wider and narrower guards did not remove the fault, so neither was retained.
+
+Three logs contain `GPU [Debug] <Critical> vk_shader_hle.cpp:242 ExecuteCopyShaderHLE: Assertion Failed!`:
+`n4_trace_on` while loading, and `video_on1`/`video_off2` during playback. One `r5scope` log
+contains `Unknown data_format=6 and num_format=1`; one `n4_baseline` log contains
+`Unknown data_format=15 and num_format=4`. Build/mode details and run timestamps are in the
+stability document. None of these GPU assertions recurred in the release/main batch. Keep
+counting them. Do not record guest code or memory in docs or commits.
 
 ## Upstream merges
 

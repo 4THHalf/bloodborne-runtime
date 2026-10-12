@@ -96,6 +96,11 @@ stall, so neither was retained. The data do not support a walker-specific failur
 walker is the arm64 default because its measured speed is equal and it removes translated code
 from renderer preparation; the opening-video fault remains open for investigation.
 
+A subsequent release comparison found that the same fault exists in v0.5.1: five alternating
+new-save movie trials faulted in 2/5 release and 4/5 current-main runs. These small counts do not
+identify a failure-rate regression. N4 is paused after its current slice while the older bug is
+investigated. The run table and GPU assertion inventory are in [Opening-video stability](STABILITY.md).
+
 ### N4 Vulkan reference (2026-10-12)
 
 One copied-save Central Yharnam hold completed 1,880 frames in 45 seconds: 43.7 FPS by frame

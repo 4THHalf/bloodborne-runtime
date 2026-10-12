@@ -13,6 +13,7 @@ The player guides (installation, game files, settings, mods, troubleshooting) ar
 - [How it works](guide/how-it-works.md): the translator, the runtime, the renderer.
 - [macOS performance](MACOS_PERFORMANCE.md): measurements, what was changed, what could still be
   gained.
+- [Opening-video stability](STABILITY.md): release comparison, failures and assertion inventory.
 - [Native renderer](NATIVE_RENDERER.md): the plan for drawing with each platform's own GPU API
   (milestone R5), and what was measured.
 - The CPU layer and the recompiler: [bloodborne-recomp](https://github.com/bloodborne-native/bloodborne-recomp)
