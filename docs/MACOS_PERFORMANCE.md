@@ -66,8 +66,8 @@ captures from the same place showed no visible difference. The default remains o
 On arm64, shader resource table (SRT) walks now run as a portable `SrtOp` program. The former
 path generated x86 walker code and ran it through bbcpu. The program and serialized shader
 cache follow ARM_bloodborne_pc `3d56243` and Bloodborne-Android `bf1e6cf`, adapted to this
-runtime. Cache directories differ by host architecture and walker mode. `BB_SRT_INTERP=1`
-selects the portable walker on arm64; the translated x86 walker remains the default. x86-64
+runtime. Cache directories differ by host architecture and walker mode. The portable walker is
+the arm64 default; `BB_SRT_INTERP=0` selects the translated x86 walker for comparison. x86-64
 keeps its native walker.
 
 Three alternating untraced pairs in Central Yharnam used 90-second holds at the same carriage:
@@ -84,11 +84,29 @@ Game-frame captures at the same place showed no visible difference. Separate eig
 samples found 67 JIT-code samples among 706 busy DrawPrep-thread samples with the translated
 walker (9.5%), and zero among 775 with the portable walker. The total DrawPrep busy share was
 0.572 versus 0.562 core; the sample lengths differed, so raw counts are not CPU-time deltas.
-These Central Yharnam holds showed similar overall performance, but a separate new-save movie
-check found a correctness problem. Two of three portable runs faulted at the same translated
-guest offset (`0x26c019c`, address `0xd2`) during the opening video; the third reached character
-creation. One translated-walker run played the video and reached character creation. The
-movie-path fault needs investigation before the portable walker can be the arm64 default.
+These Central Yharnam holds showed similar overall performance. A later isolated new-save
+opening-video check ran five translated and five portable trials in alternating order, with
+`BB_CB_PROBE=1` in two trials each way. All ten entered the movie path. The same null-pointer
+read faulted in 2/5 translated and 3/5 portable trials, on the main or graphics thread. A
+separate `ExecuteCopyShaderHLE` assertion stopped one trial each way; two translated and one
+portable trial completed the video. The command-buffer probe saw the main and graphics threads
+using the same buffer close together, but no third movie-thread writer or overlapping buffer
+memory. Two additional guard placements did not remove the fault, and one coincided with a
+stall, so neither was retained. The data do not support a walker-specific failure. The portable
+walker is the arm64 default because its measured speed is equal and it removes translated code
+from renderer preparation; the opening-video fault remains open for investigation.
+
+### N4 Vulkan reference (2026-10-12)
+
+One copied-save Central Yharnam hold completed 1,880 frames in 45 seconds: 43.7 FPS by frame
+times, 21.4 ms median, 26.2 ms p90, 494% game CPU, 1,268 draws/frame, and 4.89 µs stage-B
+GPU-thread CPU time per draw (last nine frame-stat windows). A game-frame capture showed the
+expected scene. A separate Metal trace of the same scene counted about 9.0 separate color-clear,
+36.2 tessellation compute and 47.6 buffer-copy encoders per frame; it measured 11.6 ms/frame
+busy, 3.8 ms idle inside command buffers and 5.4 ms between them. That traced run later stopped
+on a new `Unknown data_format=15 and num_format=4` GPU assertion. A second trace stalled in
+`xctrace` after its three-second limit and was stopped so the game hold could finish. The trace
+counts are a baseline inventory; they do not establish a performance change.
 
 | Change | Effect |
 |---|---|

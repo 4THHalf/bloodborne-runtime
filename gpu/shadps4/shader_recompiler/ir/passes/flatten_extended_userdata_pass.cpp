@@ -237,7 +237,7 @@ bool UsePortableSrtWalker() {
 #ifdef ARCH_ARM64
     static const bool enabled = [] {
         const char* value = std::getenv("BB_SRT_INTERP");
-        const bool portable = value && std::strcmp(value, "0") != 0;
+        const bool portable = !value || std::strcmp(value, "0") != 0;
         LOG_INFO(Render_Recompiler, "SRT walker: {}", portable ? "portable" : "translated x86");
         return portable;
     }();
