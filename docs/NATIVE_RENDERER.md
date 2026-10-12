@@ -77,7 +77,7 @@ GPU's idle time and in what each pass costs.
 Each bar has 20 blocks, one per 5%. Percentages track the accepted scope of each step, not
 remaining time. N1 is closed: deferred clears are accepted, fixed-quad triangles were measured
 and left opt-in, and extra copy grouping showed no gain. N4's interface design is approved;
-Linux CI passes and the first buffer-resource slice is opt-in while its CPU gate is checked.
+Linux CI passes and the first buffer-resource slice is opt-in with its game measurements checked.
 
 | Step | Progress | Next deliverable |
 |---|---|---|
@@ -85,7 +85,7 @@ Linux CI passes and the first buffer-resource slice is opt-in while its CPU gate
 | N1 · frame planning measurements | 100% `████████████████████` | Closed; native tessellation planned for N5 |
 | N2 · shaders ahead of time | 0% `░░░░░░░░░░░░░░░░░░░░` | Inventory shader variants |
 | N3 · textures as objects | 0% `░░░░░░░░░░░░░░░░░░░░` | Trace texture creation sites |
-| N4 · backend interface | 10% `██░░░░░░░░░░░░░░░░░░` | Resolve first resource slice's CPU gate |
+| N4 · backend interface | 10% `██░░░░░░░░░░░░░░░░░░` | Wire handle lifetime and imported backing |
 | N5 · Metal backend | 0% `░░░░░░░░░░░░░░░░░░░░` | Implement the interface after N4 |
 | N6 · engine render boundary | 0% `░░░░░░░░░░░░░░░░░░░░` | Map engine calls after R4 |
 
@@ -109,7 +109,7 @@ N1 decisions:
 | N1 | Measure frame planning changes in today's renderer | all | Closed (2026-10-12): clears accepted; tessellation moved to N5; copies unchanged |
 | N2 | Shaders ahead of time: every shader in the game's files converted at install (SPIR-V; MSL with N5) | all | |
 | N3 | Textures as objects: created when the game creates them (libGnm texture setup, the engine's texture loader), detiled once at install | all | |
-| N4 | The backend interface: the Vulkan-specific code of the renderer behind it | all | First buffer-resource slice opt-in; CPU gate remains open |
+| N4 | The backend interface: the Vulkan-specific code of the renderer behind it | all | First buffer-resource slice opt-in; game gates pass in the measured scene |
 | N5 | The Metal backend, replacing MoltenVK | macOS | |
 | N6 | The engine's own render layer as the boundary (needs R4's names and structures) | all | |
 
@@ -379,9 +379,20 @@ Two alternating untraced 45-second pairs at the same Central Yharnam location me
 Each run used eight frame-stat windows and about 1,268 draws/frame. All four completed without
 faults or GPU assertions; game-frame captures showed no visible difference. The new path only
 runs during allocation, so these FPS differences are not evidence of a rendering speedup.
-Game CPU was higher in both pairs; stage-B time was mixed. Keep this slice opt-in and resolve
-the CPU gate before advancing it or making it the default. macOS build/tests pass. Linux CI
-passed at `d064133` before this first code slice; the slice also requires a passing Linux build.
+Game CPU was higher in both uncapped pairs; stage-B time was mixed. A second batch used two
+alternating 45-second pairs capped at 40 FPS to compare CPU at equal throughput:
+
+| Pair | Existing FPS / p90 / CPU / stage-B | Descriptions FPS / p90 / CPU / stage-B |
+|---|---|---|
+| 1 | 38.8 / 25.0 ms / 405% / 4.20 µs/draw | 40.0 / 25.0 ms / 405% / 3.98 µs/draw |
+| 2 | 40.0 / 25.0 ms / 409% / 4.12 µs/draw | 40.0 / 25.0 ms / 409% / 4.08 µs/draw |
+
+The first capped reference had one long frame (1% of time above 150 ms); the other three had
+none. All four completed without faults or assertions. Game CPU matched in both pairs, p90
+matched and stage-B cost did not increase. These controls support a throughput explanation for
+the higher uncapped CPU use and pass the game gates in this scene. Keep the first slice opt-in
+while the resource boundary is incomplete. macOS build/tests pass. Linux CI passed at `d064133`
+before this first code slice, and [the slice's Linux build passed at `16555ad`](https://github.com/bloodborne-native/bloodborne-runtime/actions/runs/38249347684).
 
 Recording migration has not begun: 59 legacy lambda source sites remain and no escape opcode
 has been introduced. The remaining count must reach zero before N5.

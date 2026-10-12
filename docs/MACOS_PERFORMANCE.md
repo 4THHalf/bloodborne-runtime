@@ -114,7 +114,11 @@ untraced 45-second pairs at this location. Existing/description paths measured 4
 stage-B GPU-thread time was 4.75/4.48 and 4.63/4.66 µs/draw at about 1,268 draws/frame.
 All runs completed without faults or assertions and game-frame captures showed no visible
 difference. The allocation-only seam does not establish an FPS gain. CPU was higher in both
-pairs, so it stays opt-in with the CPU gate open before the migration advances.
+uncapped pairs. Two more alternating pairs capped at 40 FPS measured matching CPU (405/405%
+and 409/409%) and 25.0 ms p90; stage-B time was 4.20/3.98 and 4.12/4.08 µs/draw. The first
+capped reference had one long frame (38.8 FPS overall); the other three held 40.0 FPS. All
+completed without faults or assertions. The CPU gate passes at equal throughput in this scene;
+the slice stays opt-in while the resource boundary is incomplete.
 
 | Change | Effect |
 |---|---|

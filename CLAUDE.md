@@ -51,7 +51,8 @@ once, with their names and callers: the first thing to run on a "PM4 type 0" or 
 `docs/NATIVE_RENDERER.md`: milestone R5, the engine's graphics on each platform's own API (steps
 N0–N6, N0 and N1 done). Multiplatform: shared core, Vulkan and Metal backends; nothing Metal-only.
 N4's design is approved and Linux CI passes. The first buffer-resource slice is opt-in
-(`BB_N4_BUFFER_DESC=1`); its CPU gate remains open before further migration.
+(`BB_N4_BUFFER_DESC=1`); uncapped and capped A/B game gates pass in Central Yharnam. Handle
+issuance, completion-based retirement and imported backing are next.
 
 ## Rendering bugs
 
