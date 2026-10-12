@@ -4808,6 +4808,10 @@ u32 Rasterizer::ReadDataFromGds(u32 gds_offset) {
     return value;
 }
 
+bool Rasterizer::HostCopiesPendingFor(VAddr addr, u64 size) {
+    return scheduler.HostCopiesPendingFor(addr, size);
+}
+
 bool Rasterizer::InvalidateMemory(VAddr addr, u64 size, bool assume_locks) {
     DrainDrawPipe();
     if (!IsMapped(addr, size)) {

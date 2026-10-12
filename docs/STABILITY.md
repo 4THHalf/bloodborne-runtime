@@ -219,13 +219,55 @@ switches were not stamped by the isolated test harness. A read-only check of the
 launcher `last.log` found playback start/stop messages and neither watched GPU assertion;
 that log alone cannot establish the cause or identify the flashed frames.
 
+Two subsequent isolated untraced openings reproduced the visual defect with the crash guard
+held on and `BB_PIPELINED_WRITE_DATA=0`: `flash_clr_off1` (clear deferral off) and
+`flash_clr_on1` (on) both completed without faults or watched assertions. The maintainer saw
+one white flash in each, at different moments. This pair does not identify clear deferral as
+the cause; it does not establish that its timing is unaffected. A source-video luminance check
+used the local FFmpeg libraries: 1,216 decoded frames, 40.68 seconds, no frame with mean luma
+above 190/255. That excludes a full-frame near-white source image at that threshold, not every
+localized bright effect. Source decoding briefly overlapped the on run; these trials are visual
+checks, not a performance comparison. No source frames or video assets are committed.
+
+A second pair held clear deferral on and set `BB_UI_TRACE=1` in both modes:
+`flash_pipe_off1` disabled the draw pipeline; the maintainer saw no white flash but reported
+stuttering. `flash_pipe_on1` enabled it; the maintainer described playback as perfect. Neither
+log recorded a UI-composition gap or a shader/pipeline compilation window after movie entry.
+One clean run in each mode does not identify the draw pipeline as the cause or establish a fix.
+The earlier clear-mode pair had one flash each at different moments. The defect is intermittent.
+
+A third pair held the draw pipeline and clear deferral on: `flash_prep_off1` used zero
+speculative preparation workers (one mid-video flash and slight stuttering reported), while
+`flash_prep_on1` restored the normal six workers (no flash, heavy stuttering at the beginning
+reported). Disabling preparation workers therefore does not remove the defect either. All six observed
+openings completed without faults or watched GPU assertions; three had a reported flash.
+
 The earlier stale-constant cutscene fix already leaves `BB_PIPELINED_WRITE_DATA` off by
-default. Do not assume this report has the same cause. First compare isolated openings with
-`BB_DEFER_CLEARS=0` and `BB_DEFER_CLEARS=1`, alternating, with the maintainer watching and
-recording the flash count. Keep the movie-state guard enabled in both modes. If flashes remain
-in both, compare draw preparation synchronously against the default pipeline, then investigate
-video upload/invalidation and presentation ordering. Successful playback and crash-free runs
-are insufficient to accept a visual fix. N4 remains paused.
+default. Do not assume this report has the same cause. Continue observed alternating tests
+with one setting changed per pair and the movie-state guard enabled. Speculative draw-preparation
+workers and video-buffer reuse/upload ordering are the next paths to isolate. `BB_AVPLAYER_COPY_PROBE=1` adds counts of video-frame writes whose ranges overlap the
+scheduler's registered host-copy sources. It is off by default and records no addresses or
+frame contents. Slots are coarse and may be conservative; completed copies can remain
+registered until a wait updates the bookkeeping. A positive count is a possible overlap,
+not proof of an executing copy. A zero count does not cover future registrations or queued
+draw reads. It does not synchronize or change buffer reuse.
+
+The rebuilt diagnostic run `flash_copy_probe1` completed without faults or watched GPU
+assertions. The maintainer saw a flash at the very end before character creation, with no
+stuttering. The last periodic record counted 1,152 decoded-frame writes and zero possible
+registered-copy overlaps; no positive overlap report appeared before playback stopped.
+This check did not capture a registered host-copy overlap. It does not rule out future queued
+draw reads or reuse/freeing before command processing reaches the video draw. Next inspect
+resource-table snapshots and guest-visible completion ordering around video shutdown.
+
+Across these seven observed openings, four had a reported white flash. None crashed or hit
+one of the watched assertions. The visual defect is not fixed, and these counts do not prove
+a regression against released v0.5.1.
+
+Decoder-thread
+invalidation calls the rasterizer, but `DrainDrawPipe` only drains on stage A; cache locking and
+copy lifetime must be checked before changing this contract. Successful playback and
+crash-free runs are insufficient to accept a visual fix. N4 remains paused.
 
 ## Investigation boundary
 

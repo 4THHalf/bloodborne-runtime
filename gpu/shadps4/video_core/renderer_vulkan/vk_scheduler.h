@@ -977,6 +977,9 @@ public:
     /// Writes elsewhere do not wait (the hardware's command processor writes do not wait for
     /// earlier draws either).
     void WaitHostCopiesFor(u64 address, u64 size);
+    /// Thread-safe diagnostic snapshot; conservative at granule collisions. Does not
+    /// admit a CPU write or cover future copy registrations/queued draw reads.
+    bool HostCopiesPendingFor(u64 address, u64 size);
 
     /// Runs `copy` on a recording thread in order with the commands, the other host copies and
     /// the signals of SignalAfterHostCopies (the threads spin for work anyway, so small copies cost no wakeup);

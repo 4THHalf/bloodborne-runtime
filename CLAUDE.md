@@ -93,8 +93,11 @@ stability document. None of these GPU assertions recurred in the release/main co
 acceptance and gameplay batches. Keep counting them. Do not record guest code or memory in docs or commits.
 
 The maintainer also reported two bright white flashes in the opening video before character
-creation on 2026-10-12; playback completed. This visual defect is unresolved. Stability docs
-record the report and proposed observed A/B checks; do not infer visual correctness from
+creation on 2026-10-12; playback completed. This visual defect is unresolved. Seven subsequent observed openings all completed without
+faults/assertions; four had a reported white flash. Clear, draw-pipeline and preparation-worker
+pairs did not establish a cause. `BB_AVPLAYER_COPY_PROBE=1` counts possible overlaps with
+registered host-copy sources before a decoded-frame write, without logging frame data.
+Stability docs record the results and diagnostic limits; do not infer visual correctness from
 crash-free playback.
 
 ## Upstream merges

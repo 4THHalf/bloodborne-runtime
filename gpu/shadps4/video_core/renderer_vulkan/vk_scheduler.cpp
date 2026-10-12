@@ -600,24 +600,29 @@ void Scheduler::NoteHostCopySource(u64 address, u64 size) {
     }
 }
 
+bool Scheduler::HostCopiesPendingFor(u64 address, u64 size) {
+    if (size == 0) {
+        return false;
+    }
+    std::scoped_lock lk{host_copy_sources_mutex};
+    bool overlap = host_copy_big_seq > host_copy_sources_done;
+    const u64 first = address >> HostCopyGranuleShift;
+    const u64 last = (address + size - 1) >> HostCopyGranuleShift;
+    if (last - first >= HostCopyMaxGranules) {
+        overlap = true;
+    }
+    for (u64 g = first; !overlap && g <= last; ++g) {
+        const auto& slot = host_copy_slots[HostCopySlotOf(g, HostCopySlots)];
+        overlap = slot.seq > host_copy_sources_done &&
+                  (slot.granule == g || slot.granule == HostCopyWildcard);
+    }
+    return overlap;
+}
+
 void Scheduler::WaitHostCopiesFor(u64 address, u64 size) {
-    {
-        std::scoped_lock lk{host_copy_sources_mutex};
-        bool overlap = host_copy_big_seq > host_copy_sources_done;
-        const u64 first = address >> HostCopyGranuleShift;
-        const u64 last = (address + std::max<u64>(size, 1) - 1) >> HostCopyGranuleShift;
-        if (last - first >= HostCopyMaxGranules) {
-            overlap = true;
-        }
-        for (u64 g = first; !overlap && g <= last; ++g) {
-            const auto& slot = host_copy_slots[HostCopySlotOf(g, HostCopySlots)];
-            overlap = slot.seq > host_copy_sources_done &&
-                      (slot.granule == g || slot.granule == HostCopyWildcard);
-        }
-        if (!overlap) {
-            BbStats::host_copy_waits_skipped.fetch_add(1, std::memory_order_relaxed);
-            return;
-        }
+    if (!HostCopiesPendingFor(address, std::max<u64>(size, 1))) {
+        BbStats::host_copy_waits_skipped.fetch_add(1, std::memory_order_relaxed);
+        return;
     }
     WaitHostCopies();
 }

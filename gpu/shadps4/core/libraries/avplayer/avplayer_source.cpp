@@ -11,6 +11,9 @@
 #include "core/memory.h"
 
 #include <magic_enum/magic_enum.hpp>
+#include <atomic>
+#include <cstdio>
+#include <cstdlib>
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -669,6 +672,27 @@ Frame AvPlayerSource::PrepareVideoFrame(GuestBuffer buffer, const AVFrame& frame
     // Bloodborne-Android bf1e6cf: CopyNV12Data writes pitch-wide rows; unprotect the
     // full NV12 allocation before the copy to avoid a fault for each tracked page.
     const auto written = u64(pitch) * height * 3 / 2;
+    static const bool copy_probe = [] {
+        const char* env = std::getenv("BB_AVPLAYER_COPY_PROBE");
+        return env && env[0] == '1';
+    }();
+    if (copy_probe) {
+        // A conservative snapshot, not proof that a copy is executing or a write is safe.
+        // Keep addresses and frame contents out of the diagnostic.
+        static std::atomic<u64> frames{0}, overlaps{0};
+        const bool pending = Core::Memory::Instance()->HostCopiesPendingFor(
+            reinterpret_cast<VAddr>(p_buffer), written);
+        const u64 count = frames.fetch_add(1, std::memory_order_relaxed) + 1;
+        const u64 overlap_count = pending
+            ? overlaps.fetch_add(1, std::memory_order_relaxed) + 1
+            : overlaps.load(std::memory_order_relaxed);
+        if (count == 1 || count % 128 == 0 || (pending && overlap_count <= 8)) {
+            std::printf("AvPlayer host-copy probe: %llu frames, %llu frames overlapping "
+                        "queued host-copy sources before write\n",
+                        static_cast<unsigned long long>(count),
+                        static_cast<unsigned long long>(overlap_count));
+        }
+    }
     Core::Memory::Instance()->InvalidateMemory(reinterpret_cast<VAddr>(p_buffer), written);
     Videodec::CopyNV12Data(p_buffer, buffer.Size(), frame);
 

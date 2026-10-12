@@ -114,6 +114,9 @@ void MemoryManager::SetRasterizer(Vulkan::Rasterizer* rasterizer_) {
         Memory::Instance()->GetRasterizer()->OnCpuWrite(address, size);
     });
 }
+bool MemoryManager::HostCopiesPendingFor(VAddr address, u64 size) {
+    return rasterizer && rasterizer->HostCopiesPendingFor(address, size);
+}
 void MemoryManager::InvalidateMemory(VAddr address, u64 size) {
     if (rasterizer) rasterizer->InvalidateMemory(address, size);
 }
