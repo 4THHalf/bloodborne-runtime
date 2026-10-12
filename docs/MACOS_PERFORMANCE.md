@@ -108,6 +108,14 @@ on a new `Unknown data_format=15 and num_format=4` GPU assertion. A second trace
 `xctrace` after its three-second limit and was stopped so the game hold could finish. The trace
 counts are a baseline inventory; they do not establish a performance change.
 
+The first N4 buffer-description slice (`BB_N4_BUFFER_DESC=1`, opt-in) completed two alternating
+untraced 45-second pairs at this location. Existing/description paths measured 43.6/46.1 and
+45.5/45.7 FPS; p90 was 24.3/23.1 and 24.2/24.0 ms. Game CPU was 473/486% and 491/496%;
+stage-B GPU-thread time was 4.75/4.48 and 4.63/4.66 µs/draw at about 1,268 draws/frame.
+All runs completed without faults or assertions and game-frame captures showed no visible
+difference. The allocation-only seam does not establish an FPS gain. CPU was higher in both
+pairs, so it stays opt-in with the CPU gate open before the migration advances.
+
 | Change | Effect |
 |---|---|
 | Color clears deferred to the next render pass's load action (`BB_DEFER_CLEARS`) | After narrowing the upscaler check: 46.4–47.2 → 47.5–49.1 FPS in three untraced pairs; 3–4 fewer clear encoders per frame before this refinement |

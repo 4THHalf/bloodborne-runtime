@@ -76,8 +76,8 @@ GPU's idle time and in what each pass costs.
 
 Each bar has 20 blocks, one per 5%. Percentages track the accepted scope of each step, not
 remaining time. N1 is closed: deferred clears are accepted, fixed-quad triangles were measured
-and left opt-in, and extra copy grouping showed no gain. N4's interface design is approved; its
-Linux gate and pre-migration baseline are being checked before renderer implementation.
+and left opt-in, and extra copy grouping showed no gain. N4's interface design is approved;
+Linux CI passes and the first buffer-resource slice is opt-in while its CPU gate is checked.
 
 | Step | Progress | Next deliverable |
 |---|---|---|
@@ -85,7 +85,7 @@ Linux gate and pre-migration baseline are being checked before renderer implemen
 | N1 · frame planning measurements | 100% `████████████████████` | Closed; native tessellation planned for N5 |
 | N2 · shaders ahead of time | 0% `░░░░░░░░░░░░░░░░░░░░` | Inventory shader variants |
 | N3 · textures as objects | 0% `░░░░░░░░░░░░░░░░░░░░` | Trace texture creation sites |
-| N4 · backend interface | 5% `█░░░░░░░░░░░░░░░░░░░` | Verify Linux CI, then begin resource wrapper |
+| N4 · backend interface | 10% `██░░░░░░░░░░░░░░░░░░` | Resolve first resource slice's CPU gate |
 | N5 · Metal backend | 0% `░░░░░░░░░░░░░░░░░░░░` | Implement the interface after N4 |
 | N6 · engine render boundary | 0% `░░░░░░░░░░░░░░░░░░░░` | Map engine calls after R4 |
 
@@ -109,7 +109,7 @@ N1 decisions:
 | N1 | Measure frame planning changes in today's renderer | all | Closed (2026-10-12): clears accepted; tessellation moved to N5; copies unchanged |
 | N2 | Shaders ahead of time: every shader in the game's files converted at install (SPIR-V; MSL with N5) | all | |
 | N3 | Textures as objects: created when the game creates them (libGnm texture setup, the engine's texture loader), detiled once at install | all | |
-| N4 | The backend interface: the Vulkan-specific code of the renderer behind it | all | Design approved; baseline measured, Linux CI being fixed before renderer code |
+| N4 | The backend interface: the Vulkan-specific code of the renderer behind it | all | First buffer-resource slice opt-in; CPU gate remains open |
 | N5 | The Metal backend, replacing MoltenVK | macOS | |
 | N6 | The engine's own render layer as the boundary (needs R4's names and structures) | all | |
 
@@ -197,7 +197,7 @@ needs to reduce render-pass breaks or measured idle, not just command calls.
 
 ## N4 backend interface design (approved, 2026-10-12)
 
-The design is approved; no renderer implementation has started. The inventory covers
+The design is approved; the first buffer-resource slice is implemented behind a switch. The inventory covers
 `renderer_vulkan/` and the buffer and texture caches that own Vulkan resources outside it. The
 existing Vulkan path remains the reference implementation while its calls move behind the
 interface. No Metal-specific type or policy belongs in the shared core.
@@ -358,6 +358,34 @@ stopped on an `Unknown data_format=15 and num_format=4` assertion, so the trace 
 inventory, not a clean performance comparison. A replacement trace stalled in `xctrace` after
 its capture limit; its game hold completed and supplied the CPU and frame-time baseline above.
 
+### Step 2, first buffer-resource slice (2026-10-12)
+
+`BB_N4_BUFFER_DESC=1` sends ordinary and sparse buffer creation through a shared `BufferDesc`
+and Vulkan resource adapter. The description names size, usage, memory class and readback
+sharing. Vulkan translates those fields to its existing allocation settings; allocation and
+destruction now live in `vk_resource_backend.cpp`. Capability reporting covers sparse buffers,
+host imports, guest-memory export and device addresses. The shared header also defines typed
+slot/generation handle representations. Handle issuance, generation validation and completion-
+based retirement are not wired yet. Imported backing and image/view allocation remain for later
+slices; current recording and resource lifetimes still apply.
+
+Two alternating untraced 45-second pairs at the same Central Yharnam location measured:
+
+| Pair | Existing FPS / p90 / CPU / stage-B | Descriptions FPS / p90 / CPU / stage-B |
+|---|---|---|
+| 1 | 43.6 / 24.3 ms / 473% / 4.75 µs/draw | 46.1 / 23.1 ms / 486% / 4.48 µs/draw |
+| 2 | 45.5 / 24.2 ms / 491% / 4.63 µs/draw | 45.7 / 24.0 ms / 496% / 4.66 µs/draw |
+
+Each run used eight frame-stat windows and about 1,268 draws/frame. All four completed without
+faults or GPU assertions; game-frame captures showed no visible difference. The new path only
+runs during allocation, so these FPS differences are not evidence of a rendering speedup.
+Game CPU was higher in both pairs; stage-B time was mixed. Keep this slice opt-in and resolve
+the CPU gate before advancing it or making it the default. macOS build/tests pass. Linux CI
+passed at `d064133` before this first code slice; the slice also requires a passing Linux build.
+
+Recording migration has not begun: 59 legacy lambda source sites remain and no escape opcode
+has been introduced. The remaining count must reach zero before N5.
+
 ### Upstream bbport merges
 
 The renderer diverges from bbport when N4 code starts. Non-renderer parts of later bbport
@@ -374,6 +402,8 @@ upstream remote was checked on 2026-10-12: its HEAD is the 0.51 release commit
 The runtime now has `.github/workflows/linux.yml`: one `ubuntu-latest` compile job with a
 recursive checkout, Nix and `nix-shell shell.nix --run 'bash build.sh'`. It needs no game dump or
 GPU run. The job must pass before the first N4 renderer code slice and at each later boundary.
+The initial gate passed at `d064133` after fixing a hash-overload ambiguity, display-only overlay
+format strings and glibc's strict-C11 POSIX feature declarations.
 
 N3 hooks the engine's own functions. With the recompiled library loaded, recompiled functions call
 each other directly and skip hooks, so the recompiler first has to send calls to hooked functions
