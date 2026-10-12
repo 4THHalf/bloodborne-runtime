@@ -61,6 +61,35 @@ small increase should be checked again if later renderer changes affect CPU cost
 captures from the same place showed no visible difference. The default remains on, and
 `BB_DEFER_CLEARS=0` disables it.
 
+### Portable SRT walker (2026-10-12)
+
+On arm64, shader resource table (SRT) walks now run as a portable `SrtOp` program. The former
+path generated x86 walker code and ran it through bbcpu. The program and serialized shader
+cache follow ARM_bloodborne_pc `3d56243` and Bloodborne-Android `bf1e6cf`, adapted to this
+runtime. Cache directories differ by host architecture and walker mode. `BB_SRT_INTERP=1`
+selects the portable walker on arm64; the translated x86 walker remains the default. x86-64
+keeps its native walker.
+
+Three alternating untraced pairs in Central Yharnam used 90-second holds at the same carriage:
+
+| Pair | Translated FPS / p90 / game CPU | Portable FPS / p90 / game CPU |
+|---|---|---|
+| 1 | 45.3 / 24.1 ms / 496% | 43.9 / 27.0 ms / 495% |
+| 2 | 44.9 / 25.4 ms / 510% | 46.7 / 23.1 ms / 513% |
+| 3 | 47.1 / 22.6 ms / 508% | 48.3 / 21.7 ms / 503% |
+
+The means were 45.8 versus 46.3 FPS, 24.0 versus 23.9 ms p90, and 505% versus 504% game CPU
+for translated versus portable. The first pair favored translated; the next two favored portable.
+Game-frame captures at the same place showed no visible difference. Separate eight-second
+samples found 67 JIT-code samples among 706 busy DrawPrep-thread samples with the translated
+walker (9.5%), and zero among 775 with the portable walker. The total DrawPrep busy share was
+0.572 versus 0.562 core; the sample lengths differed, so raw counts are not CPU-time deltas.
+These Central Yharnam holds showed similar overall performance, but a separate new-save movie
+check found a correctness problem. Two of three portable runs faulted at the same translated
+guest offset (`0x26c019c`, address `0xd2`) during the opening video; the third reached character
+creation. One translated-walker run played the video and reached character creation. The
+movie-path fault needs investigation before the portable walker can be the arm64 default.
+
 | Change | Effect |
 |---|---|
 | Color clears deferred to the next render pass's load action (`BB_DEFER_CLEARS`) | After narrowing the upscaler check: 46.4–47.2 → 47.5–49.1 FPS in three untraced pairs; 3–4 fewer clear encoders per frame before this refinement |

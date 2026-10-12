@@ -142,6 +142,18 @@ static void mutexes(void) {
     assert((uint32_t)trylock(&mutex)==0x80020010);
     assert(unlock(&mutex)==0 && destroy(&mutex)==0);
 }
+static void conditions(void) {
+    typedef int32_t (ABI *CondInit)(void **, void **, const char *);
+    CondInit init=GET(CondInit,"2Tb92quprl0#p#J");
+    HandleOp signal=GET(HandleOp,"kDh-NfxgMtE#p#J");
+    HandleOp destroy=GET(HandleOp,"g+PZd2hiacg#p#J");
+    void *cond=NULL;
+    assert(init(&cond,NULL,"retirement-test")==0);
+    assert(signal(&cond)==0);
+    assert(destroy(&cond)==0);
+    assert((uint32_t)signal(&cond)==0x80020016);
+    assert((uint32_t)destroy(&cond)==0x80020016);
+}
 static void posix_mutexes(void) {
     AttrInit init=GET(AttrInit,"dQHWEsJtoE4#I#J");
     AttrType type=GET(AttrType,"mDmgMOGVUqg#I#J");
@@ -447,8 +459,8 @@ int main(int argc,char **argv) {
     if (argc>1 && !strcmp(argv[1],"--rwlock-lifecycle")) { rw_lifecycle(); return 0; }
     if (argc>1 && !strcmp(argv[1],"--rwlock-concurrency")) { rw_concurrency(); return 0; }
     if (argc>1 && !strcmp(argv[1],"--rwlock-timeouts")) { rw_timeouts(); return 0; }
-    libc_support(); posix_mutexes(); wall_time(); exit_handlers(); guards(); mutexes(); direct_memory(); write_traps(); memory_primitives();
+    libc_support(); posix_mutexes(); wall_time(); exit_handlers(); guards(); mutexes(); conditions(); direct_memory(); write_traps(); memory_primitives();
     rw_lifecycle(); rw_concurrency(); rw_timeouts();
-    puts("PASS: callback lifecycle, guard ABI, mutex errors, shared direct memory, memory primitives, resolver scope");
+    puts("PASS: callback lifecycle, guard ABI, mutex and condition errors, shared direct memory, memory primitives, resolver scope");
     return 0;
 }

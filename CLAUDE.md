@@ -58,6 +58,15 @@ Bisect bbport's optimizations first: `BB_TOGGLE_FILE` holds a mask of switches (
 The user watches and says what they see. Example: the cutscene flashing was bit 42
 (`WRITE_DATA` pipelined on the recording thread).
 
+If a game run hangs in an indirect dispatch, first retry with `BB_INDIRECT_GUARD=0`:
+Bloodborne-Android reported a hang after a few minutes with upstream's guard enabled on its
+device. This has not been observed here.
+
+The opt-in portable SRT walker (`BB_SRT_INTERP=1`) faulted in two of three new-save opening-video
+runs at translated guest offset `0x26c019c`, address `0xd2`; one portable and one default
+translated-walker run completed the video. Keep the translated walker as the arm64 default until
+the fault is understood. Do not record guest code or memory in docs or commits.
+
 ## Upstream merges
 
 bbport releases come as squashed commits; remote `upstream`
