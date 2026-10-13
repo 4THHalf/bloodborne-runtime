@@ -93,3 +93,8 @@ A later `trophy_focus_final` isolated hold completed at 46.7 FPS and p90 23.2 ms
 without a fault, but the chat app remained frontmost in all 40 window samples. The
 helper sent no previews, as designed for an unfocused game. This run is inconclusive
 for notification focus and is not a matched performance comparison.
+
+A second focus check, `trophy_focus_active`, completed at 46.9 FPS and p90 22.5 ms
+without a fault. The helper sent two previews late in the run; VS Code remained
+frontmost in all 36 metadata samples. This does not establish game-focused behavior
+or a performance change.
