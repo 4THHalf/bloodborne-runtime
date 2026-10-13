@@ -24,3 +24,29 @@ N4 remains paused.
 
 This fixes a source-level lifetime defect. It has not been established as the cause of the
 historical sampler assertions or video flashes, and no performance improvement is claimed.
+
+### Texture upload baselines
+
+Ported [Supermedo/bloodborne_pc `7e8bd6c1`](https://github.com/Supermedo/bloodborne_pc/commit/7e8bd6c1c85661cf0912531509ace5cf7cfc05a0),
+authored by devilismyfriend and committed by ayozetr, with
+[Supermedo's `136a72d0`](https://github.com/Supermedo/bloodborne_pc/commit/136a72d0c2b79efc4f7d6f8e163ae6783c388d4a)
+cost limit. Our existing whole-image hash-range fix from bmy/bbport-mac remains.
+
+An upload records a guest-memory baseline for mips of at most 64 KiB, writable images, and
+GPU-modified images not marked for a newer buffer upload. Later unchanged guest bytes do not
+replace GPU-produced image contents. Actual CPU changes and newer GPU buffer sources still
+refresh the image. Baselines have explicit validity and are independent per mip. Large streamed
+textures are not hashed merely to establish a baseline. Hashes in precise-readback mode read
+through the existing backing view, using reusable thread-local scratch storage.
+
+Baseline capture remains opt-in (`BB_IMAGE_UPLOAD_BASELINE=1`); unset or `=0` retains the
+previous baseline timing. Both modes retain explicit baseline representation, safe backing-view
+reads and the whole-image guard against skipping newer GPU buffer sources. The control mode
+is not a byte-for-byte old build. The startup log reports the selected mode.
+
+`build.sh --test` includes `image-upload-hash-test`, which checks GPU preservation, real CPU
+writes beyond the first pixels, newer GPU buffer imports, first storage binding, independent
+mips, a zero-valued digest and the hashing limit. It passes on macOS arm64 and under
+AddressSanitizer and UndefinedBehaviorSanitizer. Linux CI builds and runs this standalone test.
+It exercises the upload decision with synthetic data; it does not emulate Vulkan image uploads
+or prove correctness of every aliasing and synchronization case.

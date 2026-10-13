@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <xxhash.h>
+#include <cstdlib>
+#include <cstring>
 
 #include "bbport_toggles.h"
 #include "bbport_free_check.h"
@@ -26,6 +28,30 @@ namespace VideoCore {
 static constexpr u64 PageShift = 12;
 static constexpr u64 NumFramesBeforeRemoval = 32;
 
+namespace {
+bool UploadBaselinesEnabled() {
+    static const bool enabled = [] {
+        const char* value = std::getenv("BB_IMAGE_UPLOAD_BASELINE");
+        return value && std::strcmp(value, "0") != 0;
+    }();
+    return enabled;
+}
+
+u64 HashUploadGuestMemory(VAddr address, u64 size) {
+    static const bool precise =
+        EmulatorSettings.GetReadbacksMode() == GpuReadbacksMode::Precise;
+    if (!precise) {
+        return XXH3_64bits(reinterpret_cast<const void*>(address), size);
+    }
+    // Precise readbacks protect GPU-written guest pages against reads. The GPU thread must
+    // inspect the CPU baseline through the backing view, without requesting its own readback.
+    thread_local std::vector<u8> scratch;
+    scratch.resize(size);
+    Core::Memory::Instance()->ReadBacking(address, scratch.data(), size);
+    return XXH3_64bits(scratch.data(), size);
+}
+} // namespace
+
 TextureCache::TextureCache(const Vulkan::Instance& instance_, Vulkan::Scheduler& scheduler_,
                            Vulkan::Runtime& runtime_, AmdGpu::Liverpool* liverpool_,
                            BufferCache& buffer_cache_, PageManager& tracker_)
@@ -33,7 +59,7 @@ TextureCache::TextureCache(const Vulkan::Instance& instance_, Vulkan::Scheduler&
       buffer_cache{buffer_cache_}, tracker{tracker_}, blit_helper{instance, scheduler},
       tile_manager{instance, scheduler, runtime, buffer_cache.GetStreamBuffer()},
       readback_linear_images{EmulatorSettings.IsReadbackLinearImagesEnabled()} {
-
+    std::printf("Texture upload baselines: %s\n", UploadBaselinesEnabled() ? "on" : "off");
     u32 max_samplers = instance.GetMaxSamplerAllocationCount();
     trigger_gc_samplers = max_samplers * 3 / 4;
     pressure_gc_samplers = max_samplers * 7 / 8;
@@ -882,8 +908,9 @@ void TextureCache::RefreshImage(Image& image) {
     RENDERER_TRACE;
     TRACE_HINT(fmt::format("{:x}:{:x}", image.info.guest_address, image.info.guest_size));
 
+    // An unchanged CPU copy cannot suppress an upload from a newer GPU buffer source.
     if (True(image.flags & ImageFlagBits::MaybeCpuDirty) &&
-        False(image.flags & ImageFlagBits::CpuDirty)) {
+        False(image.flags & (ImageFlagBits::CpuDirty | ImageFlagBits::GpuDirty))) {
         // The image size should be less than page size to be considered MaybeCpuDirty
         // So this calculation should be very uncommon and reasonably fast
         // bbport (from bmy/bbport-mac): the whole image, as MarkAsMaybeDirty hashes it. Its first
@@ -948,6 +975,10 @@ void TextureCache::RefreshImage(Image& image) {
     }
     BbStats::image_upload_bytes.fetch_add(image.info.guest_size, std::memory_order_relaxed);
     boost::container::small_vector<vk::BufferImageCopy, 14> image_copies;
+    const bool baseline = UploadBaselinesEnabled();
+    const bool protect = is_gpu_modified && !is_gpu_dirty;
+    const bool writable = image.usage.storage || image.usage.render_target ||
+                          image.usage.depth_target;
     for (u32 m = 0; m < num_mips; m++) {
         const u32 width = std::max(image.info.size.width >> m, 1u);
         const u32 height = std::max(image.info.size.height >> m, 1u);
@@ -955,14 +986,25 @@ void TextureCache::RefreshImage(Image& image) {
             image.info.props.is_volume ? std::max(image.info.size.depth >> m, 1u) : 1u;
         const auto [mip_size, mip_pitch, mip_height, mip_offset] = image.info.mips_layout[m];
 
-        // Protect GPU modified resources from accidental CPU reuploads.
-        if (is_gpu_modified && !is_gpu_dirty) {
-            const u8* addr = std::bit_cast<u8*>(image.info.guest_address);
-            const u64 hash = XXH3_64bits(addr + mip_offset, mip_size);
-            if (image.mip_hashes[m] == hash) {
-                continue;
+        // Supermedo/bloodborne_pc 7e8bd6c1 (devilismyfriend), with 136a72d0's
+        // upload-cost limit (Supermedo): establish the CPU baseline before a GPU write.
+        // Unchanged guest bytes must not replace newer image contents. Large streamed
+        // textures are not hashed unless writable or already modified by the GPU.
+        if (baseline ? NeedsImageUploadHash(mip_size, is_gpu_modified, is_gpu_dirty, writable)
+                     : protect) {
+            const u64 hash = HashUploadGuestMemory(image.info.guest_address + mip_offset, mip_size);
+            auto& state = image.mip_hashes[m];
+            if (baseline) {
+                if (!state.ShouldUpload(hash, is_gpu_modified, is_gpu_dirty)) {
+                    continue;
+                }
+            } else {
+                // Diagnostic comparison with the previous baseline timing.
+                if (state.value == hash) {
+                    continue;
+                }
+                state.value = hash;
             }
-            image.mip_hashes[m] = hash;
         }
 
         const u32 extent_width = mip_pitch ? std::min(mip_pitch, width) : width;

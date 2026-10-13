@@ -635,3 +635,15 @@ averaged 4.35 us/draw on stage B. No fault, GPU assertion or invalid-mutex panic
 appeared. Visual correctness was not independently assessed. This single smoke test is not an
 A/B performance result or proof of the cause of any historical video/sampler failure.
 The existing watch counts are unchanged; N4 remains paused.
+
+## Texture upload baseline checks (2026-10-13)
+
+Four isolated copied-save holds (`imgbase_off1`, `imgbase_on1`, `imgbase_off2`, `imgbase_on2`)
+completed without faults, GPU assertions or invalid-mutex panics. The Supermedo upload-baseline
+port remains opt-in because both untraced pairs favored off for FPS/p90 and stage-B time.
+The whole-image fast path now excludes newer GPU buffer writes in both modes. Normal-flow
+and sanitizer regression tests pass with synthetic data. The first pair's game captures
+showed no visible difference; the second on capture was black near shutdown and is excluded.
+This batch did not exercise character creation, opening-video playback or precise-readback
+gameplay. Historical assertion counts remain unchanged; N4 remains paused. Results and limits:
+[macOS performance](MACOS_PERFORMANCE.md#texture-upload-baseline-experiment-2026-10-13).

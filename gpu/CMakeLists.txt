@@ -191,6 +191,10 @@ endif()
 
 # Explicit test targets; neither launches the game nor needs a Vulkan device.
 find_package(Threads REQUIRED)
+add_executable(image-upload-hash-test EXCLUDE_FROM_ALL ../tests/test_image_upload_hash.cpp)
+target_compile_options(image-upload-hash-test PRIVATE -UNDEBUG -Wall -Wextra -Werror)
+target_include_directories(image-upload-hash-test PRIVATE shadps4)
+target_link_libraries(image-upload-hash-test PRIVATE PkgConfig::XXHASH)
 add_executable(slot-vector-test EXCLUDE_FROM_ALL ../tests/test_slot_vector.cpp
     shim/common/slot_vector_pages.cpp)
 target_compile_options(slot-vector-test PRIVATE -UNDEBUG -D_DEBUG -Wall -Wextra -Werror)

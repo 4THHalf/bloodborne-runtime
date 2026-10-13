@@ -62,6 +62,8 @@ The macOS app (launcher, DMG, releases) is
 - `bash build.sh --test`: native runtime tests, including `slot-vector-test` (50,000 stable
   entries, alignment, iteration, slot reuse and destruction). This test needs no game or GPU
   device and also runs in Linux CI.
+  `image-upload-hash-test` checks GPU-image preservation, real CPU writes, newer GPU buffer
+  sources, independent mips and the hashing limit; it also runs in Linux CI without a GPU.
 
 Upstream's GTK4 launcher (`bash launcher/bb-launcher.sh`) also works, with
 `brew install gtk4 libadwaita pygobject3`.

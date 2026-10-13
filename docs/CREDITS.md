@@ -22,6 +22,13 @@ project it is based on.
 
 Changes taken from other ports of bbport, with thanks:
 
+- [**Supermedo/bloodborne_pc**](https://github.com/Supermedo/bloodborne_pc/commit/7e8bd6c1c85661cf0912531509ace5cf7cfc05a0)
+  (GPL-2.0-or-later, `7e8bd6c1`, authored by devilismyfriend, committed by ayozetr): record
+  guest-memory baselines before GPU image writes to prevent stale CPU uploads. Includes
+  [Supermedo's `136a72d0`](https://github.com/Supermedo/bloodborne_pc/commit/136a72d0c2b79efc4f7d6f8e163ae6783c388d4a)
+  limit on hashing large streamed textures. Adapted with explicit baseline validity, independent
+  mip state and backing-view reads in precise-readback mode. Our existing whole-image hash-range
+  fix from bmy/bbport-mac was retained. No game code or assets were taken.
 - [**Supermedo/bloodborne_pc**](https://github.com/Supermedo/bloodborne_pc/commit/3a7cde8389e58423a9a33b41eb6380a0f497d3f4)
   (GPL-2.0-or-later, commit `3a7cde8`, authored by João Pedro Valadares): stable `SlotVector`
   storage and texture-cache reference reacquisition, following upstream shadPS4. Adapted with

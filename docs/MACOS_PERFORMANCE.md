@@ -246,3 +246,39 @@ project-cache checks used bundled MoltenVK. OS/Metal caches were retained. Full 
 observations, compilation counters and remaining acceptance limits are in
 [Stability](STABILITY.md#pre-release-repeat-and-downloaded-package-checks-2026-10-13).
 Historical sampler and shutdown faults remain on the watch list; no new release is tagged.
+
+## Texture upload baseline experiment (2026-10-13)
+
+The Supermedo Windows-fork baseline fix (`7e8bd6c1`, devilismyfriend, with Supermedo's
+`136a72d0` hashing limit) is implemented behind `BB_IMAGE_UPLOAD_BASELINE=1`. It establishes
+a per-mip CPU baseline for small or writable images before GPU writes, so unchanged guest
+bytes can be distinguished from actual CPU changes. Large streamed textures are not hashed
+merely to establish a baseline. The existing whole-image hash-range fix remains.
+
+Two untraced off/on pairs held the same Central Yharnam position for 90 seconds each.
+Game CPU is sampled percent, with 100% equal to one core. Stage B is the mean of the 18
+steady-state `GPU thread us/draw` log windows per run.
+
+| Pair and runs | Off FPS / p90 / CPU / stage B | On FPS / p90 / CPU / stage B |
+|---|---|---|
+| 1: `imgbase_off1`, `imgbase_on1` | 48.5 / 21.8 ms / 510% / 4.43 us/draw | 47.7 / 22.7 ms / 511% / 4.54 us/draw |
+| 2: `imgbase_off2`, `imgbase_on2` | 46.2 / 24.2 ms / 506% / 4.74 us/draw | 44.2 / 25.8 ms / 482% / 4.81 us/draw |
+
+Pair 2 includes an additional whole-image fast-path guard in both modes: an unchanged CPU
+hash cannot suppress a refresh marked for a newer GPU buffer source. No game fault, GPU
+assertion or invalid-mutex panic appeared in these four runs. The first pair's game-frame
+captures showed no visible change. The final on capture was requested near shutdown and was
+black; it is excluded from visual comparison, not recorded as an in-game rendering defect.
+Character creation and precise-readback gameplay were not exercised in this batch.
+
+Both pairs favored off for FPS and p90, and stage-B time increased with capture on. The later
+pair was slower overall; these runs do not separate system variation from hashing cost.
+Lower game CPU in the second on run accompanied lower throughput and is not evidence of
+a CPU optimization. Baseline capture remains opt-in pending cost investigation; the whole-image
+GPU-buffer guard is enabled in both modes. No performance gain or historical video fix is claimed.
+
+The normal-flow `image-upload-hash-test` and AddressSanitizer/UndefinedBehaviorSanitizer checks
+pass with synthetic data: GPU preservation, real CPU writes, newer buffer sources, first
+storage binding, independent mips, zero-valued digests and the hashing limit. Linux CI includes
+the standalone test. Source attribution and implementation details are in
+[Renderer ports](upstream/RENDERER_PORTS.md#texture-upload-baselines).
