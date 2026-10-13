@@ -282,3 +282,41 @@ pass with synthetic data: GPU preservation, real CPU writes, newer buffer source
 storage binding, independent mips, zero-valued digests and the hashing limit. Linux CI includes
 the standalone test. Source attribution and implementation details are in
 [Renderer ports](upstream/RENDERER_PORTS.md#texture-upload-baselines).
+
+### Hash cost diagnosis and capped repeat (2026-10-13)
+
+`BB_IMAGE_UPLOAD_HASH_STATS=1` reports aggregate calls, bytes and elapsed hash-path time every
+five seconds. It separates checks already present in the control path (`shared`) from extra
+small-mip and large writable-image baselines, plus skipped uploads and first valid baselines.
+It reports no guest addresses, hash values or memory contents. Timing includes backing-view
+reads when precise readbacks are selected; it is elapsed time, not a thread CPU-clock sample.
+The counters and timers are off by default.
+
+Two diagnostic off/on runs used 45-second holds capped at 40 FPS. In the last eight on
+windows, each about five seconds, 800–804 large writable mip hashes read 150.000–150.750 MiB
+and took 9.908–12.129 ms. That is approximately four hashes and 0.05–0.06 ms per presented
+frame at 40 FPS. Extra small-mip hashes occurred while loading but were zero in those hold
+windows; shared checks, skipped uploads and first baselines were also zero there. The
+control hold reported zero hash calls. Thus the recurring work is large writable mips, not
+small streamed textures. This does not explain the full earlier uncapped FPS difference.
+
+An additional off/on pair disabled the counters. All four runs used the same copied save,
+40 FPS cap and 45-second holds without tracing. Stage B is the mean of the final eight
+frame-stat windows.
+
+| Runs | Off FPS / p90 / game CPU / stage B | On FPS / p90 / game CPU / stage B |
+|---|---|---|
+| Diagnostic: `hashdiag_off`, `hashdiag_on` | 40.0 / 25.0 ms / 407% / 4.05 us/draw | 40.0 / 25.0 ms / 409% / 4.04 us/draw |
+| Counters off: `hashgate_off`, `hashgate_on` | 39.7 / 25.0 ms / 421% / 4.27 us/draw | 40.0 / 25.0 ms / 407% / 4.07 us/draw |
+
+All four completed without faults, GPU assertions or invalid-mutex panics. The capped
+comparisons did not show a repeatable stage-B or game-CPU regression; they do not establish
+a speedup or resolve the earlier uncapped difference. No new visual, opening-video,
+character-creation or precise-readback acceptance was performed. Baseline capture remains
+opt-in. The normal-flow build/tests pass; the preceding baseline-port commit also passed
+Linux and macOS CI.
+
+Full hashes are retained. Reusing a previous digest based only on `CpuDirty` would need a
+proven invalidation rule covering guest writes, host writebacks and GPU writes into imported
+backing memory. The current counters cannot prove that rule. No sampling of only part of an
+image, unchecked digest reuse or renderer migration was introduced; N4 remains paused.

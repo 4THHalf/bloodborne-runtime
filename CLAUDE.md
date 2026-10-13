@@ -57,6 +57,15 @@ N4 is paused after this slice at the maintainer's request: opening-video stabili
 
 ## Rendering bugs
 
+The Windows-fork texture upload-baseline port remains opt-in (`BB_IMAGE_UPLOAD_BASELINE=1`).
+Two uncapped pairs favored off; later capped comparisons did not show a repeatable CPU
+regression. `BB_IMAGE_UPLOAD_HASH_STATS=1` measures aggregate calls, bytes and elapsed
+hash-path time without guest addresses or contents. Four recurring large writable mip
+checks cost about 0.05–0.06 ms per frame at 40 FPS in Central Yharnam. The larger uncapped
+difference is unresolved; retain full checks and the off default. Details are in
+`docs/MACOS_PERFORMANCE.md`. N4 remains paused.
+
+
 Bisect bbport's optimizations first: `BB_TOGGLE_FILE` holds a mask of switches (bits 0–19, 30,
 32–50; re-read every 250 ms); run with all off, then halve groups with one fixed mask per run.
 The user watches and says what they see. Example: the cutscene flashing was bit 42

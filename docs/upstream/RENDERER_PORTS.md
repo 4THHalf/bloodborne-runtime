@@ -50,3 +50,12 @@ mips, a zero-valued digest and the hashing limit. It passes on macOS arm64 and u
 AddressSanitizer and UndefinedBehaviorSanitizer. Linux CI builds and runs this standalone test.
 It exercises the upload decision with synthetic data; it does not emulate Vulkan image uploads
 or prove correctness of every aliasing and synchronization case.
+
+`BB_IMAGE_UPLOAD_HASH_STATS=1` now measures aggregate hash calls, bytes and elapsed time in
+shared, extra-small and extra-writable buckets; it records no guest addresses or contents.
+A capped diagnosis found approximately four large writable mip hashes per frame, costing
+0.05–0.06 ms per frame at 40 FPS. Small-mip capture stopped after loading. Two 45-second
+capped off/on comparisons, one instrumented and one with counters off, did not show a
+repeatable stage-B/game-CPU regression. The earlier uncapped difference remains unresolved,
+so capture remains opt-in. Full hash checks are retained; no unsafe digest caching was added.
+Details: [macOS performance](../MACOS_PERFORMANCE.md#hash-cost-diagnosis-and-capped-repeat-2026-10-13).

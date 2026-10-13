@@ -647,3 +647,11 @@ showed no visible difference; the second on capture was black near shutdown and 
 This batch did not exercise character creation, opening-video playback or precise-readback
 gameplay. Historical assertion counts remain unchanged; N4 remains paused. Results and limits:
 [macOS performance](MACOS_PERFORMANCE.md#texture-upload-baseline-experiment-2026-10-13).
+
+Four further copied-save holds (`hashdiag_off`, `hashdiag_on`, `hashgate_off`, `hashgate_on`)
+completed without faults, GPU assertions or invalid-mutex panics. They used 45-second holds
+capped at 40 FPS; counters were enabled only in the diagnostic pair. Hash-path cost and
+capped CPU comparisons are recorded in
+[macOS performance](MACOS_PERFORMANCE.md#hash-cost-diagnosis-and-capped-repeat-2026-10-13).
+Baseline capture remains opt-in. No new opening-video or visual acceptance was performed,
+and historical watch counts are unchanged.

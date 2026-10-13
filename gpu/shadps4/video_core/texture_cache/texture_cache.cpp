@@ -2,6 +2,9 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <xxhash.h>
+#include <array>
+#include <atomic>
+#include <chrono>
 #include <cstdlib>
 #include <cstring>
 
@@ -37,18 +40,76 @@ bool UploadBaselinesEnabled() {
     return enabled;
 }
 
-u64 HashUploadGuestMemory(VAddr address, u64 size) {
+bool UploadHashStatsEnabled() {
+    static const bool enabled = [] {
+        const char* value = std::getenv("BB_IMAGE_UPLOAD_HASH_STATS");
+        return value && std::strcmp(value, "0") != 0;
+    }();
+    return enabled;
+}
+
+struct UploadHashCounters {
+    struct Bucket {
+        std::atomic<u64> calls{}, bytes{}, ns{};
+    };
+    // Existing GPU-image checks, extra small-mip baselines, extra large writable baselines.
+    std::array<Bucket, 3> buckets{};
+    std::atomic<u64> skips{}, first_baselines{};
+} upload_hash_counters;
+
+void ReportUploadHashStats() {
+    if (!UploadHashStatsEnabled()) {
+        return;
+    }
+    using Clock = std::chrono::steady_clock;
+    static auto last = Clock::now();
+    const auto now = Clock::now();
+    const double seconds = std::chrono::duration<double>(now - last).count();
+    if (seconds < 5.0) {
+        return;
+    }
+    last = now;
+    std::string report = fmt::format("Image upload hashes: {:.2f} s", seconds);
+    constexpr std::array<const char*, 3> names{"shared", "extra-small", "extra-writable"};
+    for (std::size_t i = 0; i < names.size(); ++i) {
+        auto& b = upload_hash_counters.buckets[i];
+        const auto calls = b.calls.exchange(0, std::memory_order_relaxed);
+        const auto bytes = b.bytes.exchange(0, std::memory_order_relaxed);
+        const auto ns = b.ns.exchange(0, std::memory_order_relaxed);
+        report += fmt::format("; {} {} calls, {:.3f} MiB, {:.3f} ms", names[i], calls,
+                              bytes / 1048576.0, ns / 1e6);
+    }
+    report += fmt::format("; {} skips, {} first baselines",
+                          upload_hash_counters.skips.exchange(0, std::memory_order_relaxed),
+                          upload_hash_counters.first_baselines.exchange(0, std::memory_order_relaxed));
+    std::printf("%s\n", report.c_str());
+}
+
+u64 HashUploadGuestMemory(VAddr address, u64 size, bool shared) {
+    const bool stats = UploadHashStatsEnabled();
+    const auto start = stats ? std::chrono::steady_clock::now()
+                             : std::chrono::steady_clock::time_point{};
     static const bool precise =
         EmulatorSettings.GetReadbacksMode() == GpuReadbacksMode::Precise;
-    if (!precise) {
-        return XXH3_64bits(reinterpret_cast<const void*>(address), size);
-    }
+    const void* source = reinterpret_cast<const void*>(address);
     // Precise readbacks protect GPU-written guest pages against reads. The GPU thread must
     // inspect the CPU baseline through the backing view, without requesting its own readback.
-    thread_local std::vector<u8> scratch;
-    scratch.resize(size);
-    Core::Memory::Instance()->ReadBacking(address, scratch.data(), size);
-    return XXH3_64bits(scratch.data(), size);
+    if (precise) {
+        thread_local std::vector<u8> scratch;
+        scratch.resize(size);
+        Core::Memory::Instance()->ReadBacking(address, scratch.data(), size);
+        source = scratch.data();
+    }
+    const u64 hash = XXH3_64bits(source, size);
+    if (stats) {
+        auto& bucket = upload_hash_counters.buckets[shared ? 0 : size <= 64 * 1024 ? 1 : 2];
+        const auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                            std::chrono::steady_clock::now() - start).count();
+        bucket.calls.fetch_add(1, std::memory_order_relaxed);
+        bucket.bytes.fetch_add(size, std::memory_order_relaxed);
+        bucket.ns.fetch_add(ns, std::memory_order_relaxed);
+    }
+    return hash;
 }
 } // namespace
 
@@ -992,10 +1053,17 @@ void TextureCache::RefreshImage(Image& image) {
         // textures are not hashed unless writable or already modified by the GPU.
         if (baseline ? NeedsImageUploadHash(mip_size, is_gpu_modified, is_gpu_dirty, writable)
                      : protect) {
-            const u64 hash = HashUploadGuestMemory(image.info.guest_address + mip_offset, mip_size);
+            const u64 hash = HashUploadGuestMemory(image.info.guest_address + mip_offset, mip_size,
+                                                 protect);
             auto& state = image.mip_hashes[m];
             if (baseline) {
+                if (UploadHashStatsEnabled() && !state.valid) {
+                    upload_hash_counters.first_baselines.fetch_add(1, std::memory_order_relaxed);
+                }
                 if (!state.ShouldUpload(hash, is_gpu_modified, is_gpu_dirty)) {
+                    if (UploadHashStatsEnabled()) {
+                        upload_hash_counters.skips.fetch_add(1, std::memory_order_relaxed);
+                    }
                     continue;
                 }
             } else {
@@ -1432,6 +1500,7 @@ void TextureCache::NoteVramShort() {
 }
 
 void TextureCache::RunGarbageCollector() {
+    ReportUploadHashStats();
     SCOPE_EXIT {
         ++gc_tick;
     };
