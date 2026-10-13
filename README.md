@@ -15,7 +15,8 @@ or as recompiled native code it generates.
 |---|---|
 | [bloodborne-recomp](https://github.com/bloodborne-native/bloodborne-recomp) | The recompiler and bbcpu: portable |
 | **bloodborne-runtime** (this one) | Loads the game: the PS4 libraries, the renderer |
-| [bloodborne-mac](https://github.com/bloodborne-native/bloodborne-mac) | The macOS app (launcher, DMG, releases) |
+| [bloodborne-launcher](https://github.com/bloodborne-native/bloodborne-launcher) | The independent launcher: profiles, saves and settings |
+| [bloodborne-mac](https://github.com/bloodborne-native/bloodborne-mac) | Packages the launcher as the macOS app, with releases and player guides |
 
 **Players:** download the app from [bloodborne-mac](https://github.com/bloodborne-native/bloodborne-mac/releases/latest).
 
