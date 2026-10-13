@@ -78,3 +78,7 @@ new-save opening with `tools/test_opening_video.sh NAME`. The latter creates a f
 directory, navigates setup with one Up press for Next, and reports whether playback completed.
 `VIDEO_GRAB=1` captures the game's frame at character creation. Tell the user before batches;
 check `pgrep -x bb-probe` first. Never use the real save directory or capture the user's screen.
+
+Isolated game tests default to English (`BB_LANGUAGE=1 BB_UI_LANGUAGE=en`), as do launcher
+and overlay acceptance tests. Explicit arguments can override the game language for a
+maintainer-requested language investigation.

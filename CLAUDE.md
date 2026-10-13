@@ -22,6 +22,10 @@ the `recomp/` submodule (bloodborne-recomp), or as its recompiled library (`BB_R
 
 ## Build, run, test
 
+Tests use English (`BB_LANGUAGE=1 BB_UI_LANGUAGE=en`, and English launcher/helper UI).
+The isolated game runner supplies those defaults; a later explicit language investigation
+may override them at the maintainer’s request.
+
 ```sh
 bash build.sh                                   # macOS: builds deps/ the first time (~1 h)
 BB_GAME_DIR=~/Downloads/PS4/Bloodborne/CUSA03173 bash run.sh
