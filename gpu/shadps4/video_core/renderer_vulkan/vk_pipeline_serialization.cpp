@@ -223,6 +223,13 @@ bool GraphicsPipeline::SerializationSupport::Deserialize(Serialization::Archive&
 bool PipelineCache::LoadGraphicsPipeline(Serialization::Archive& ar) {
     sel.graphics_key.Deserialize(ar);
 
+    // Supermedo/bloodborne_pc f33e7617 (João Pedro Valadares): rebuild motion pipelines
+    // at first use. Cached metadata can describe a plain shader permutation, bypassing
+    // LoadShaderMeta's motion check; motion shaders also contain session-local addresses.
+    if (sel.graphics_key.motion_vectors) {
+        return false;
+    }
+
     GraphicsPipeline::SerializationSupport sdata{};
     sdata.Deserialize(ar);
 

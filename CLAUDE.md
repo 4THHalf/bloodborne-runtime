@@ -57,6 +57,16 @@ N4 is paused after this slice at the maintainer's request: opening-video stabili
 
 ## Rendering bugs
 
+Motion-vector graphics pipeline keys are rejected during cache preload, before stage metadata
+is read. Metadata can describe a plain permutation and bypass the shader-level motion check;
+motion shaders also contain session-local buffer addresses. Rebuild those pipelines at first
+use. Ordinary pipelines still preload; no cache-format version changed. This ports
+Supermedo/bloodborne_pc `f33e7617` by João Pedro Valadares. See the renderer port log for checks
+and limits. It is not an established fix for the historical video or sampler assertions.
+The warm-cache copied-save check and one isolated opening completed without new assertions;
+372 pipelines preloaded and the maintainer reported perfect playback. Motion vectors were off,
+so the motion-cache failure itself was not reproduced here. Historical counts are unchanged.
+
 The Windows-fork texture upload-baseline port remains opt-in (`BB_IMAGE_UPLOAD_BASELINE=1`).
 Two uncapped pairs favored off; later capped comparisons did not show a repeatable CPU
 regression. `BB_IMAGE_UPLOAD_HASH_STATS=1` measures aggregate calls, bytes and elapsed

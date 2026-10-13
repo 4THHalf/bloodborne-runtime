@@ -17,6 +17,26 @@ a 90-second hold without faults or assertions. Historical rare faults remain on 
 list; clean-machine launcher/Gatekeeper UI was not covered. Details and limits are in
 [Pre-release checks](#pre-release-repeat-and-downloaded-package-checks-2026-10-13).
 
+## Pipeline-cache preload guard (2026-10-13)
+
+The guard from Supermedo/bloodborne_pc `f33e7617` rejects motion-vector graphics pipeline
+keys before loading shader metadata. Such metadata can describe a plain permutation;
+motion shaders also contain session-local addresses. Rebuild those pipelines at first use.
+Ordinary graphics and compute pipelines still preload; no cache-format change was needed.
+Credit and source: [renderer port log](upstream/RENDERER_PORTS.md#motion-vector-pipeline-preload-guard).
+
+`build.sh --test` passed on macOS arm64. Two untraced isolated runs used the default renderer:
+
+| Run | Check | Result |
+|---|---|---|
+| `mv_cache_warm` | Copied-save warm-cache startup and 45-second hold | Completed; 44.8 FPS, p90 24.7 ms, sampled CPU 486%, GPU 97%, stage-B 4.63 us/draw. |
+| `mv_cache_opening` | Fresh-save opening using the warm shared shader cache, with `BB_GPU_LOG=info` | Preloaded 372 pipelines; playback completed and the maintainer reported perfect playback. The game's own frame dump showed character creation. |
+
+Neither log contained a fault, GPU assertion or invalid-mutex panic. Historical assertion
+counts are unchanged. Motion vectors were off, so this is a startup/playback smoke check;
+it does not reproduce the foreign motion-cache failure or validate motion output. No
+performance gain or white-flash fix is claimed. N4 remains paused.
+
 ## Status (2026-10-12)
 
 The new-save opening video faults before character creation in released v0.5.1 and in main

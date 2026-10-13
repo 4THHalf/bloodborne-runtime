@@ -22,6 +22,10 @@ project it is based on.
 
 Changes taken from other ports of bbport, with thanks:
 
+- [**Supermedo/bloodborne_pc**](https://github.com/Supermedo/bloodborne_pc/commit/f33e7617bc1486dec0698786bd87baa40c02eab7)
+  (GPL-2.0-or-later, `f33e7617`, authored by João Pedro Valadares): skip motion-vector
+  graphics pipelines during cache preload. This extends the existing motion-shader rejection
+  to keys whose cached metadata describes a plain permutation. Pipelines rebuild at first use.
 - [**Supermedo/bloodborne_pc**](https://github.com/Supermedo/bloodborne_pc/commit/7e8bd6c1c85661cf0912531509ace5cf7cfc05a0)
   (GPL-2.0-or-later, `7e8bd6c1`, authored by devilismyfriend, committed by ayozetr): record
   guest-memory baselines before GPU image writes to prevent stale CPU uploads. Includes

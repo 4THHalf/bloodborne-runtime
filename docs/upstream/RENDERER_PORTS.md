@@ -67,3 +67,25 @@ Post-trace holds measured 47.2/46.9 FPS and 22.9/23.2 ms p90. The earlier larger
 difference remains unresolved; keep baseline capture opt-in. The trace reader's new
 `--complete-frames` option and six synthetic tests make the normalization reproducible.
 [Measurements and limits](../MACOS_PERFORMANCE.md#uncapped-gpu-trace-comparison-2026-10-13).
+
+### Motion-vector pipeline preload guard
+
+Ported [Supermedo/bloodborne_pc `f33e7617`](https://github.com/Supermedo/bloodborne_pc/commit/f33e7617bc1486dec0698786bd87baa40c02eab7),
+authored by João Pedro Valadares. `LoadGraphicsPipeline` rejects motion-vector keys before
+loading stage metadata or creating Vulkan objects. Cached metadata can describe a plain
+shader permutation, which bypasses the existing motion-vertex metadata check. Motion shaders
+also embed session-local buffer addresses. These pipelines rebuild at first use; ordinary
+graphics and compute pipelines still preload. Serialization versions are unchanged because
+this changes admission, not the cache format. This applies to the Vulkan backend on all hosts.
+
+`build.sh --test` passed on macOS arm64. The untraced copied-save run `mv_cache_warm`
+completed a 45-second hold: 44.8 FPS, p90 24.7 ms, sampled game CPU 486%, GPU utilization
+97% and stage-B time 4.63 us/draw (last eight log windows). No fault, GPU assertion or
+invalid-mutex panic appeared. This is a startup/gameplay smoke check, not an A/B speed claim.
+The default motion-vector setting was off, so these runs do not reproduce the foreign
+motion-cache failure or validate motion output. No motion-cache skip count was measured.
+
+The fresh-save opening `mv_cache_opening` used the warm shared cache with `BB_GPU_LOG=info`:
+372 pipelines preloaded, playback completed, and the maintainer reported perfect playback.
+The game frame dump showed character creation. Neither run logged a fault, GPU assertion or
+invalid-mutex panic. Historical assertion counts are unchanged; N4 remains paused.
