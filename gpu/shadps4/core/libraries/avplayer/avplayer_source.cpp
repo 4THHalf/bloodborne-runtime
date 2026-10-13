@@ -427,20 +427,25 @@ bool AvPlayerSource::GetVideoData(AvPlayerFrameInfoEx& video_info) {
         return false;
     }
 
-    if (m_video_frames.Size() == 0) {
-        RecordVideoTiming(VideoOutcome::Empty);
-        return false;
-    }
-
     const auto current_time = CurrentTime();
-    const auto& new_frame = m_video_frames.Front();
-    if (m_state.GetSyncMode() == AvPlayerAvSyncMode::Default) {
-        if (new_frame.info.timestamp > current_time) {
-            RecordVideoTiming(VideoOutcome::Future, current_time, new_frame.info.timestamp);
+    const auto sync_mode = m_state.GetSyncMode();
+    std::optional<u64> future_timestamp;
+    auto frame = m_video_frames.PopIf([&](const Frame& candidate) {
+        if (sync_mode == AvPlayerAvSyncMode::Default && candidate.info.timestamp > current_time) {
+            future_timestamp = candidate.info.timestamp;
             return false;
         }
+        return true;
+    });
+    if (!frame) {
+        if (future_timestamp) {
+            RecordVideoTiming(VideoOutcome::Future, current_time, *future_timestamp);
+        } else {
+            RecordVideoTiming(VideoOutcome::Empty);
+        }
+        return false;
     }
-    RecordVideoTiming(VideoOutcome::Shown, current_time, new_frame.info.timestamp);
+    RecordVideoTiming(VideoOutcome::Shown, current_time, frame->info.timestamp);
 
     if (m_current_video_frame.has_value()) {
         m_video_buffers.Push(std::move(m_current_video_frame->buffer));
@@ -448,7 +453,6 @@ bool AvPlayerSource::GetVideoData(AvPlayerFrameInfoEx& video_info) {
         m_video_buffers_cv.Notify();
     }
 
-    auto frame = m_video_frames.Pop();
     video_info = frame->info;
 
     m_current_video_frame = std::move(frame);
@@ -460,7 +464,8 @@ bool AvPlayerSource::GetAudioData(AvPlayerFrameInfo& audio_info) {
         return false;
     }
 
-    if (m_audio_frames.Size() == 0) {
+    auto frame = m_audio_frames.Pop();
+    if (!frame) {
         return false;
     }
 
@@ -470,7 +475,6 @@ bool AvPlayerSource::GetAudioData(AvPlayerFrameInfo& audio_info) {
         m_audio_buffers_cv.Notify();
     }
 
-    auto frame = m_audio_frames.Pop();
     m_clock.NoteAudio(frame->info.timestamp);
 
     audio_info = {};

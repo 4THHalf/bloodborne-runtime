@@ -128,6 +128,11 @@ shutdown panics. The last periodic lag was only 36 ms. The 128-record destructio
 and `Mv_` lifecycle trace are opt-in under `BB_PTHREAD_PROBE=1`; absence of a record is not
 proof of safety. Strict `BB_SUBMIT_LOCK=gpu` trials completed, but one still flashed twice,
 so no submission-lock default was changed. Stability docs record the full comparisons.
+The AV queue race is repaired: size, selection and pop are locked; no unlocked front reference
+escapes. `avplayer-queue-test` runs in `build.sh --test` and passes ThreadSanitizer, whereas the
+original queue reproduced a data race. `video_queue_after1` completed and logged audio return
+before main detached it; its visual report is unavailable. This is a source-correctness repair,
+not acceptance of the white-flash or thread-state shutdown fixes. Keep the release gate open.
 
 ## Upstream merges
 

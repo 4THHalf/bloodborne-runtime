@@ -452,6 +452,36 @@ This is the third recorded audio-thread invalid-mutex panic. The next target is 
 and thread-stop ordering that allows main to destroy the state while the audio thread can
 still use it. Caller analysis is for understanding only; no guest code or memory is published.
 
+#### Queue repair and its limits
+
+Source review found unsynchronized `std::queue::size()` reads in `AvPlayerQueue::Size`,
+including decoder, frame-availability and controller-event checks. `Pop` also tested for
+emptiness before taking the mutex, and video selection held an unlocked front reference.
+A standalone single-producer/consumer/observer stress test reproduced a ThreadSanitizer data
+race in the original queue. The same stress test passed after locking queue size and pop.
+
+The repaired queue locks every container access. `PopIf` tests and removes the front under one
+lock; video timing selects a due frame there, then owns it after unlocking. Audio fetch also
+owns the popped frame before recycling its previous buffer and checks for an empty result.
+Future frames remain queued. This repairs queue synchronization; it does not establish that
+all source state, stop callbacks or borrowed guest-frame lifetimes are safe.
+
+`avplayer-queue-test` is in `build.sh --test`, alongside the clock and fixed-quad tests. It
+passed conditional selection, move-only FIFO ownership, a 20,000-item producer with two
+competing consumers and a size observer, and concurrent clear/pop with exactly-once buffer
+destruction. The integrated test passed under ThreadSanitizer with no reported races. The
+full build/test flow passed with the usual macOS guest-TLS and 4-KiB loader skips.
+
+`video_queue_after1` (`1013_113141`) loaded the repaired GPU library (hash prefix
+`9601e6924fde`) with the same pipeline-on, decode-lock settings as the repeated pre-fix
+control. It completed normally; audio entry returned before main detached the thread. Its
+last periodic record had 1,536 requests, 1,189 shown frames, 10 frames over 100 ms late,
+maximum lag 152 ms and lead 14 ms. Visual feedback is unavailable at this checkpoint.
+The pre-fix control's apparently perfect playback followed by a shutdown fault is evidence
+that visual observation alone is insufficient. One repaired opening does not prove a fix for
+the shutdown panic or flashes. This repair is retained for the verified queue race; the
+premature thread-state destructor and pre-enqueue sampler input remain release blockers.
+
 ## Investigation boundary
 
 Use Ghidra to understand the null pointer's callers and the state they read, then check the
