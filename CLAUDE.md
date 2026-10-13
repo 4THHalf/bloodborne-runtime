@@ -101,8 +101,8 @@ Stability docs record the results and diagnostic limits; do not infer visual cor
 crash-free playback.
 
 One additional optimization-baseline trial, `flash_opts_off1`, stopped during the video with
-`GPU [Debug] <Critical> liverpool_to_vk.cpp:394 MipFilter: Unreachable code!` (three occurrences: `flash_opts_off1`,
-`flash_clock_after1` and translated-walker `flash_srt_off1`).
+`GPU [Debug] <Critical> liverpool_to_vk.cpp:394 MipFilter: Unreachable code!` (four occurrences: `flash_opts_off1`,
+`flash_clock_after1`, translated-walker `flash_srt_off1` and `flash_resume1`).
 Repeated baselines with the command-buffer probe completed; flash counts were unavailable.
 Clock review found an unsynchronized audio timestamp/anchor pair. The clock now uses a mutex
 and steady host time; standalone tests also pass under ThreadSanitizer.
@@ -111,6 +111,16 @@ sampler provenance and flattened bounds; the translated failure had valid indice
 sampler data and a draw snapshot. The portable comparison completed, but was not visually
 observed. Release acceptance remains open. Do not call the
 white flashes fixed on the strength of the clock unit tests.
+
+On 2026-10-13, `flash_enqueue_on1` and `flash_pthread_on1` faulted on `Mv_AudioPlayThread`
+after `Logical Error. Invalid mutex.(EINVAL)`. The second reproduced with `BB_CB_PROBE=0`
+and logged `ensure_mutex` returning EINVAL; its playback had looked perfect before shutdown.
+The paired pipeline-off runs completed and were reported as perfect. `BB_PTHREAD_PROBE=1`
+logs EINVAL operations; mutex validation now distinguishes null handle slots from destroyed
+handles (that distinction is not yet game-validated). `BB_SAMPLER_PROBE=1` also checks invalid
+filters at draw enqueue, to distinguish stage-A input from later binding. The enqueue check has
+not yet triggered. Keep these shutdown panics separate from the earlier null-read and GPU
+assertions. Stability docs list all five new trials and their limits.
 
 ## Upstream merges
 

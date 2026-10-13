@@ -198,7 +198,8 @@ Navigation waits for the bench driver's title inputs to finish, then uses two-se
 settle times instead of the previous 15- and 20-second pauses. `VIDEO_MENU_WAIT` and
 `VIDEO_SETUP_WAIT` can increase those delays for slow boots. After the final press it polls
 for movie entry for up to ten seconds, returning immediately when entry is logged. These
-timing changes passed shell syntax checks; game navigation has not yet been rechecked.
+timing changes passed shell syntax checks. Subsequent pipeline-off and pipeline-on runs
+both entered the movie with these shorter waits.
 
 The user reported poor video frame rate before crashes. The last pacing windows in
 `faultstate1` and `faultstate2` had p99 values of 118.05 and 51.36 ms. Cold pipeline compilation
@@ -276,7 +277,7 @@ The documented optimization mask disables bits 0–19, 30 and 32–50
 (`2251796593508351`); it does not disable the movie-state guard or clear deferral.
 `flash_opts_off1` entered playback and failed with
 `GPU [Debug] <Critical> liverpool_to_vk.cpp:394 MipFilter: Unreachable code!`.
-This is a new sampler assertion, one occurrence so far, not one of the earlier SurfaceFormat
+This was the first occurrence of a new sampler assertion, not one of the earlier SurfaceFormat
 or ExecuteCopyShaderHLE assertions. The mask was corrected during boot before the video;
 this trial is not a performance baseline. The next runs used the exact mask from startup.
 
@@ -331,6 +332,72 @@ Decoder-thread
 invalidation calls the rasterizer, but `DrainDrawPipe` only drains on stage A; cache locking and
 copy lifetime must be checked before changing this contract. Successful playback and
 crash-free runs are insufficient to accept a visual fix. N4 remains paused.
+
+### Follow-up on 2026-10-13
+
+The faster navigation reached playback in `flash_resume1` (`1013_102457`), but that default
+pipeline-on run hit the same MipFilter assertion: the fourth occurrence. The sampler probe
+identified a table-sourced mip word, valid flattened indices, and a draw snapshot. The user
+reported a crash. The last periodic timing record had 768 requests, 577 shown frames, no
+empty-queue waits or frames over 100 ms late, maximum lag 52 ms and lead 12 ms.
+
+`BB_SAMPLER_PROBE=1` now checks invalid filters both when stage A queues a draw and when
+stage B binds its sampler. The phase is logged along with the existing descriptor-path
+summary, without descriptor contents or addresses. This is diagnostic only; invalid samplers
+still assert. The added enqueue check has not yet captured an invalid value.
+
+The next same-build pair kept the command-buffer probe enabled:
+
+| Run | Draw pipeline | Outcome | User observation |
+| --- | --- | --- | --- |
+| `flash_enqueue_off1` (`1013_102814`) | Off | Normal playback stop, no fault | Perfect playback, no flashes or stutter |
+| `flash_enqueue_on1` (`1013_103037`) | On | Movie audio-thread panic near playback end | Low frame rate, stutter, no observed flashes; audio finished before video |
+
+The on run sustained about 25–26 FPS during the later movie windows. Its last periodic record
+had 1,152 requests and shown frames, all more than 100 ms late, with maximum lag **7,335 ms**.
+The off run's last periodic record had 1,536 requests, 1,149 shown frames, no frames over
+100 ms late, maximum lag 43 ms and lead 14 ms. These are periodic records, not full-movie
+counts. Neither run reported a registered host-copy overlap or an invalid sampler.
+
+After the user's playback observation, the on run logged
+`Logical Error. Invalid mutex.(EINVAL)` and a signal-11 fault on `Mv_AudioPlayThread`.
+This differs from the earlier null-read and GPU assertions. The returning pthread operation
+is not established. `BB_PTHREAD_PROBE=1` now logs the operation and guest thread on an
+`EINVAL` result, without handles or guest memory; return values are unchanged. Build and
+runtime tests passed, including the clock and fixed-quad tests; the usual macOS guest-TLS
+and 4-KiB loader tests were skipped.
+
+A further same-build off/on pair disabled the command-buffer probe in both modes and enabled
+`BB_PTHREAD_PROBE=1`:
+
+| Run | Draw pipeline | Outcome | User observation |
+| --- | --- | --- | --- |
+| `flash_pthread_off1` (`1013_103442`) | Off | Normal playback stop, no fault | Perfect playback |
+| `flash_pthread_on1` (`1013_103710`) | On | Same movie audio-thread panic after playback observation | Perfect playback before the later fault |
+
+The off run's last periodic record had 1,536 requests, 1,170 shown frames, 72 frames more
+than 100 ms late, maximum lag 534 ms and lead 13 ms. The on run's last periodic record had
+1,536 requests, 1,167 shown frames, 28 frames over 100 ms late, maximum lag 1,574 ms and lead
+16 ms. Earlier periodic records in both modes had no frames over 100 ms late. Neither run
+reported an invalid sampler or registered host-copy overlap.
+
+The on run logged `Pthread probe: ensure_mutex returned EINVAL, thread Mv_AudioPlayThread`
+before the same invalid-mutex panic and signal-11 fault. This establishes that the shutdown
+fault does not require the command-buffer probe. The diagnostic did not distinguish a null
+handle slot from a destroyed handle. The revised diagnostic names the calling mutex operation
+and distinguishes those two validation failures; this revision passed the runtime tests but
+has not yet been exercised in a faulting game run. Host `thread_join` uses `pthread_join`,
+so source review did not find a stub that returns before thread completion. Caller-chain analysis identified the blocking guest mutex lock in the movie audio thread
+state check. It does not establish who destroyed that state or whether a null slot was passed.
+Thread stop, completion and destruction ordering need a focused trace next; analysis output
+remains outside Git and the wiki.
+
+All five trials used fresh isolated saves and no Metal trace. These are playback observations
+and fault diagnostics, not gameplay performance gates. There are now four MipFilter assertions
+and two movie audio-thread invalid-mutex panics in the recorded investigation. No new
+ExecuteCopyShaderHLE or SurfaceFormat assertion appeared in this batch. The enqueue sampler
+probe did not trigger, so it has not established where that corruption starts. N4 and release
+acceptance remain paused; these results do not establish a white-flash fix.
 
 ## Investigation boundary
 
