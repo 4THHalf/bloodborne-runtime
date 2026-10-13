@@ -46,6 +46,14 @@ an area loads; `src/runtime_cmdbuf.c` holds a per-buffer lock across the game's 
 methods (bbcpu guards; `BB_CB_GUARD=0`: off). `BB_CB_PROBE=1` reports any buffer two threads use at
 once, with their names and callers: the first thing to run on a "PM4 type 0" or "Bad PM4 packet".
 
+## Local trophies
+
+`docs/TROPHIES.md` describes profile-owned event recording and edited-save gating.
+Always keep trophy imports local, even with the online module enabled. Check `.bb-edited`
+inside the selected save subtree before granting an unlock; a launcher environment flag cannot
+re-enable an edited save. Preserve earned history across restores. Online access restrictions
+for edited saves are undecided; do not add one without the maintainer's decision.
+
 ## Native renderer
 
 `docs/NATIVE_RENDERER.md`: milestone R5, the engine's graphics on each platform's own API (steps

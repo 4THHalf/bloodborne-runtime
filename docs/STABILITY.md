@@ -682,3 +682,10 @@ panics. Complete-frame normalization showed similar encoder counts and no increa
 busy time with baseline capture on. This is not visual or opening-video acceptance.
 Baseline capture remains opt-in, and historical watch counts are unchanged. Full measurements:
 [macOS performance](MACOS_PERFORMANCE.md#uncapped-gpu-trace-comparison-2026-10-13).
+
+## Local trophy tracking check (2026-10-13)
+
+The `trophies_smoke` copied-save run completed a 45-second hold without faults, GPU assertions
+or invalid-mutex panics. Synthetic runtime tests verify event recording and edited-save
+suppression; the game hold did not earn a trophy. Historical assertion counts are unchanged.
+[Protocol, checks and limits](TROPHIES.md).
