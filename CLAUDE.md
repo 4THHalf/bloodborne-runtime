@@ -133,6 +133,10 @@ escapes. `avplayer-queue-test` runs in `build.sh --test` and passes ThreadSaniti
 original queue reproduced a data race. `video_queue_after1` completed and logged audio return
 before main detached it; its visual report is unavailable. This is a source-correctness repair,
 not acceptance of the white-flash or thread-state shutdown fixes. Keep the release gate open.
+The repeated repaired opening `video_queue_after2` completed with clean return-before-detach
+ordering and was reported as perfect playback. Both repaired trials completed (2/2), with only
+the repeat visually observed. Linux and macOS CI passed for `f86fabf`. These checks are positive;
+the wider sampler and premature-destruction investigations remain open.
 
 ## Upstream merges
 

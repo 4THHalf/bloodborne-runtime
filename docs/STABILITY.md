@@ -482,6 +482,22 @@ that visual observation alone is insufficient. One repaired opening does not pro
 the shutdown panic or flashes. This repair is retained for the verified queue race; the
 premature thread-state destructor and pre-enqueue sampler input remain release blockers.
 
+#### Observed queue-repair repeat (2026-10-13)
+
+At the maintainer's request, `video_queue_after2` (`1013_121409`) repeated the repaired build
+with the same pipeline-on, decode-lock settings and a fresh isolated save. The maintainer
+reported **perfect playback**. Playback stopped normally, the movie audio entry returned
+before main detached it, and the full run ended without faults or GPU assertions.
+
+Its last periodic timing record had 1,536 requests, 1,159 shown frames, no empty-queue waits,
+377 future-frame waits, 32 frames more than 100 ms late, maximum lag 197 ms and lead 15 ms.
+These are partial timing counters, not full-movie counts or a gameplay performance comparison.
+
+Both repaired openings completed (**2/2**); only this repeat was visually observed. Linux and
+macOS CI passed for runtime `f86fabf`. This is a positive observed check, but two completions
+and one observed playback do not close the sampler and shutdown investigations or establish
+release acceptance.
+
 ## Investigation boundary
 
 Use Ghidra to understand the null pointer's callers and the state they read, then check the

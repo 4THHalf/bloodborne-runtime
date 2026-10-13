@@ -125,8 +125,8 @@ regression or a safe workaround. A further pre-fix control captured main destroy
 thread's mutex slot 13.374 ms before its invalid use, despite a last periodic video lag of
 only 36 ms. Strict GPU-completion submission locking still flashed, so its default was not
 changed. The AV queue's unlocked size/front checks are repaired and its new normal-flow test
-passes ThreadSanitizer; the old queue reproduced a race. One repaired opening completed,
-with no visual report yet. The premature thread-state destruction and pre-enqueue sampler
+passes ThreadSanitizer; the old queue reproduced a race. Two repaired openings completed; the repeated run, `video_queue_after2`, was reported as
+perfect playback and had clean audio-thread shutdown. The first was not visually observed. The premature thread-state destruction and pre-enqueue sampler
 input remain unresolved. Details and test limitations are in the stability notes.
 
 Three capped 40 FPS, untraced `HOLD=90` gameplay pairs had identical 25.0 ms p90. Mean CPU was
