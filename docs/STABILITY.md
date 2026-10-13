@@ -616,3 +616,22 @@ tests, frontend checks/build and Clippy passed. The local DMG build passed deep/
 verification. This closes the first-profile/Home check on this Mac; clean-machine Gatekeeper
 behavior and a complete upgrade UI on another Mac remain unverified. The runtime binaries
 are the same ones used in the preceding game acceptance batch.
+
+## Stable image storage (2026-10-13)
+
+Ported Supermedo/bloodborne_pc `3a7cde8`, authored by João Pedro Valadares, after upstream
+shadPS4. `SlotVector` previously moved live images when its capacity grew, while
+`FindDepthTarget` and `ResolveDepthOverlap` retained references across an insertion. The pool
+now keeps addresses fixed, and those paths reacquire references after insertion.
+
+`bash build.sh --test` passes on macOS arm64. The normal-flow storage test forces 50,000
+non-movable, 64-byte-aligned entries across 2 MiB page boundaries, checks iteration and reuse,
+and verifies that every constructed object is destroyed exactly once. It also passes
+AddressSanitizer and UndefinedBehaviorSanitizer. Linux CI includes the same standalone test.
+
+The isolated copied-save run `stable_images1` held gameplay for 90 seconds: 48.2 FPS, frame-time
+p90 21.8 ms, sampled game CPU 504% and GPU utilization 98%. The 18 steady-state log windows
+averaged 4.35 us/draw on stage B. No fault, GPU assertion or invalid-mutex panic
+appeared. Visual correctness was not independently assessed. This single smoke test is not an
+A/B performance result or proof of the cause of any historical video/sampler failure.
+The existing watch counts are unchanged; N4 remains paused.

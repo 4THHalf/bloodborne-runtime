@@ -22,6 +22,11 @@ project it is based on.
 
 Changes taken from other ports of bbport, with thanks:
 
+- [**Supermedo/bloodborne_pc**](https://github.com/Supermedo/bloodborne_pc/commit/3a7cde8389e58423a9a33b41eb6380a0f497d3f4)
+  (GPL-2.0-or-later, commit `3a7cde8`, authored by João Pedro Valadares): stable `SlotVector`
+  storage and texture-cache reference reacquisition, following upstream shadPS4. Adapted with
+  POSIX page protection inside the reserved mapping, fatal allocation checks and a normal-flow
+  regression test. No game code or assets were taken.
 - [**bmy/bbport-mac**](https://github.com/bmy/bbport-mac) (Rosetta 2 port of bbport to macOS):
   - the Retina-resolution window (`gpu/shim/window.cpp`, `BB_RETINA`);
   - the texture cache hashing whole images when checking a possibly changed one (the item

@@ -59,6 +59,9 @@ The macOS app (launcher, DMG, releases) is
 - `tools/grab.sh [--screen] NAME`: saves the game's own frame as a PNG (`--screen` includes the
   in-game menu, which `touch out/menu.trigger` opens).
 - `python3 -m unittest discover -s tests`: the Python tests.
+- `bash build.sh --test`: native runtime tests, including `slot-vector-test` (50,000 stable
+  entries, alignment, iteration, slot reuse and destruction). This test needs no game or GPU
+  device and also runs in Linux CI.
 
 Upstream's GTK4 launcher (`bash launcher/bb-launcher.sh`) also works, with
 `brew install gtk4 libadwaita pygobject3`.

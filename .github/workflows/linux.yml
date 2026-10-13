@@ -24,3 +24,8 @@ jobs:
           nix_path: nixpkgs=channel:nixos-unstable
       - name: Build
         run: nix-shell shell.nix --run 'bash build.sh'
+      - name: Test stable resource storage
+        run: |
+          nix-shell shell.nix --run 'set -e
+          ninja -C out/gpu slot-vector-test
+          out/gpu/slot-vector-test'
