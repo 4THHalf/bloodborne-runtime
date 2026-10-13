@@ -1,5 +1,13 @@
 # Opening-video stability
 
+## Latest check (2026-10-13)
+
+The pre-release repeat passed five observed default-renderer openings and two self-contained
+package openings, including an empty project-cache run. Packaged copied-save gameplay passed
+a 90-second hold without faults or assertions. Historical rare faults remain on the watch
+list; clean-machine launcher/Gatekeeper UI was not covered. Details and limits are in
+[Pre-release checks](#pre-release-repeat-and-downloaded-package-checks-2026-10-13).
+
 ## Status (2026-10-12)
 
 The new-save opening video faults before character creation in released v0.5.1 and in main
@@ -497,6 +505,89 @@ Both repaired openings completed (**2/2**); only this repeat was visually observ
 macOS CI passed for runtime `f86fabf`. This is a positive observed check, but two completions
 and one observed playback do not close the sampler and shutdown investigations or establish
 release acceptance.
+
+### Pre-release repeat and downloaded package checks (2026-10-13)
+
+The runtime build/test flow passed on `ae638a4` (queue repair `f86fabf`). The online-module,
+guest-TLS and 4-KiB loader checks retained their documented macOS skips. Five further openings
+used fresh isolated saves, default renderer settings, no Metal trace and the same local GPU
+library (hash prefix `9601e6924fde`). Timing and movie-thread diagnostics were enabled;
+the command-buffer probe was disabled. They all completed without faults or GPU assertions,
+and all five were observed as successful playback.
+
+| Run (log stamp) | Observation | Last periodic maximum lag | Audio exit/detach log order |
+| --- | --- | --- | --- |
+| `release_video1` (`1013_124338`) | Perfect playback | 40 ms | Exit before detach |
+| `release_video2` (`1013_124643`) | Perfect again | 39 ms | Exit before detach |
+| `release_video3` (`1013_124951`) | Perfect again | 41 ms | Exit before detach |
+| `release_video4` (`1013_125258`) | Perfect again | 38 ms | Detach before exit |
+| `release_video5` (`1013_125615`) | Another success | 44 ms | Exit before detach |
+
+Each last periodic record had 1,536 requests, no empty-queue waits and no frames more than
+100 ms late. These remain partial counters, not full-movie totals. Detach does not require an
+already-returned thread: trial 4 completed normally, with no invalid-mutex panic. Its order is
+recorded rather than described as identical to the other four. A game-only frame capture in
+trial 5 confirmed the character-creation menu; no desktop capture was used.
+
+#### Downloaded CI artifact
+
+[App CI run 38391850077](https://github.com/bloodborne-native/bloodborne-mac/actions/runs/38391850077)
+passed for app `7643ae5`, launcher `cf9226d` and runtime `ae638a4`. Its downloaded artifact was
+`bloodborne_mac-v0.5.1-41-g7643ae5-arm64.dmg`; this is a development package, not a new tagged
+release. The DMG mounted read-only, deep/strict signature verification passed, and 13 Mach-O
+executables/libraries had only system or relative library references. Bundled bash 5.3.0 and
+Python 3.13.16 ran successfully.
+
+Game tests still used `tools/test_run.sh` (the fresh-save helper delegates to it). A temporary
+`BB_PROBE` wrapper re-entered the package's `run.sh` using its bundled bash, Python and probe,
+with isolated writable data and the helper's isolated save/config. Its PATH contained the
+bundle and system tools, and development dynamic-library overrides were removed. The running
+process's executable, GPU library, Vulkan loader and MoltenVK paths were checked with `lsof`.
+
+| Run (log stamp) | Cache / driver | Result | Observation |
+| --- | --- | --- | --- |
+| `release_package_video` (`1013_130102`) | Warm / development MoltenVK inherited by harness | Completed, no fault; excluded from self-contained package acceptance | Perfect |
+| `release_package_video2` (`1013_130533`) | Warm / all checked binaries and rendering libraries from the DMG | Completed, normal audio exit before detach, no fault/assertion | Perfect |
+| `release_package_cold` (`1013_130842`) | Empty project cache / bundled driver | Completed, normal audio exit before detach, no fault/assertion | Perfect again; compilation felt fast |
+
+The first wrapper retained the outer harness's `VK_DRIVER_FILES`. Loaded-library inspection
+caught the development MoltenVK; the repeated checks explicitly selected the bundle manifest.
+That first result is recorded, but does not establish independence from development libraries.
+The two corrected package openings both reached character creation, also checked with game-only
+frames. Their last periodic maximum lag was 35/30 ms, with no empty waits or frames more than
+100 ms late. All seven accepted openings in this batch were observed as successful playback.
+
+The project-cache directory did not exist before the cold run. Logged compilation windows
+counted 71 shader/pipeline compilations before the movie (53.1 ms), eight during it (5.8 ms),
+and 68 after it at character creation (90.6 ms). These are summed frame-window counters.
+macOS/Metal's own caches were retained: this covers an empty project cache on this Mac, not a
+new operating-system account or an erased driver cache.
+
+#### Packaged copied-save gameplay
+
+`release_package_gameplay` (`1013_131232`) used an isolated copy of the existing save, the
+same self-contained downloaded runtime and a 90-second untraced hold. Timing/thread probes
+were off. The user reported perfect loading/playback; there was no fault or assertion.
+Loaded executable and rendering-library paths again pointed inside the mounted DMG.
+
+| Output / scene | Mean FPS | Median frame time | Frame-time p90 | Sampled game CPU | GPU utilization | GPU thread time |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1920×1080 / 1130×636, uncapped | 47.3 | 20.5 ms | 22.9 ms | 511% of one core | 98% | 4.68 us/draw |
+
+The frame summary covers 4,159 frames; no hold time was spent in frames over 150 ms.
+GPU-thread time is the mean of the last 18 loaded-scene windows. This is a single stability
+smoke check, not an A/B comparison or evidence of a speed change.
+
+No new `ExecuteCopyShaderHLE`, SurfaceFormat or MipFilter assertion appeared in these runs,
+and no movie audio-thread invalid-mutex panic recurred. Historical counts remain three
+copy-shader assertions, one SurfaceFormat 6/1, one SurfaceFormat 15/4, five MipFilter assertions
+and three audio-thread panics. This repeat gate is positive; it does not prove that every rare
+sampler/lifetime failure is fixed. Keep those faults on the watch list.
+
+The version remains 0.5.1 and no release was tagged. These tests exercise the packaged game
+entry point through the isolation harness, not the packaged launcher's full first-setup UI or
+Gatekeeper flow on a clean machine. Launcher unit/browser checks were recorded separately.
+N4 remains paused until the maintainer chooses to resume it.
 
 ## Investigation boundary
 

@@ -226,3 +226,23 @@ trace.
 
 Expected: native 1080p in the mid-to-high 30s; FSR presets around 50 FPS. 60 FPS at native 1080p
 would need much less GPU work than the game issues.
+
+## Pre-release stability repeat (2026-10-13)
+
+Five further default-renderer openings with fresh isolated saves completed, all observed as
+successful playback. Two self-contained downloaded-package openings also passed, including
+an empty project-cache run. The last periodic maximum video lag was 38–44 ms locally and
+35/30 ms for the warm/empty-cache package checks; those partial records had no empty waits or
+frames more than 100 ms late. No fault, GPU assertion or invalid-mutex panic appeared.
+
+The downloaded CI package from app `7643ae5` passed a 90-second, untraced copied-save hold:
+47.3 FPS, median 20.5 ms, p90 22.9 ms, sampled game CPU 511%, GPU utilization 98% and GPU-thread
+time 4.68 us/draw at 1920×1080 output / 1130×636 scene. This is one stability check, not a
+performance comparison. Its executable and rendering libraries were verified inside the DMG.
+
+The first package opening accidentally inherited the development driver through the harness;
+it completed but is excluded from self-contained acceptance. The corrected warm and cold
+project-cache checks used bundled MoltenVK. OS/Metal caches were retained. Full runs, user
+observations, compilation counters and remaining acceptance limits are in
+[Stability](STABILITY.md#pre-release-repeat-and-downloaded-package-checks-2026-10-13).
+Historical sampler and shutdown faults remain on the watch list; no new release is tagged.

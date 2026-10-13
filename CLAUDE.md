@@ -138,6 +138,18 @@ ordering and was reported as perfect playback. Both repaired trials completed (2
 the repeat visually observed. Linux and macOS CI passed for `f86fabf`. These checks are positive;
 the wider sampler and premature-destruction investigations remain open.
 
+Pre-release QA on 2026-10-13 added five default-renderer isolated openings, all completed and
+observed as successful, plus two self-contained downloaded-package openings (warm and empty
+project cache), also observed as perfect. There were no faults, GPU assertions or invalid-mutex
+panics. One extra package opening inherited development MoltenVK through the harness and is
+excluded from self-contained acceptance; the repeat corrected the driver selection. A
+90-second packaged copied-save hold passed at 47.3 FPS, p90 22.9 ms, sampled CPU 511% and
+GPU-thread time 4.68 us/draw. Runtime tests and app CI passed. These are positive acceptance
+checks, not proof that all rare historical faults are fixed; keep the existing watch counts.
+The project cache was empty in the cold check, but OS/Metal caches were retained. Full
+packaged-launcher first-setup/Gatekeeper UI was not exercised by these isolated game tests.
+No version bump/tag occurred, and N4 remains paused. See the pre-release section in STABILITY.
+
 ## Upstream merges
 
 bbport releases come as squashed commits; remote `upstream`
