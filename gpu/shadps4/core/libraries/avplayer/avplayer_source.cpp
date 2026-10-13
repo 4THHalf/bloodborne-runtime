@@ -301,10 +301,10 @@ bool AvPlayerSource::Start() {
             m_audio_buffers.Push(GuestBuffer(m_memory_replacement, 0x10, size, false));
         }
     }
+    m_clock.Start();
     m_demuxer_thread.Run([this](std::stop_token stop) { this->DemuxerThread(stop); });
     m_video_decoder_thread.Run([this](std::stop_token stop) { this->VideoDecoderThread(stop); });
     m_audio_decoder_thread.Run([this](std::stop_token stop) { this->AudioDecoderThread(stop); });
-    m_start_time = std::chrono::high_resolution_clock::now();
     return true;
 }
 
@@ -334,11 +334,8 @@ bool AvPlayerSource::Stop() {
     m_audio_frames.Clear();
     m_video_frames.Clear();
 
-    m_last_audio_ts.reset();
-    m_last_data_time.reset();
-    m_start_time.reset();
-    m_pause_time = {};
-    m_pause_duration = {};
+    PrintVideoTiming();
+    m_clock.Stop();
 
     m_is_paused = false;
     m_is_eof = false;
@@ -347,12 +344,12 @@ bool AvPlayerSource::Stop() {
 }
 
 void AvPlayerSource::Pause() {
-    m_pause_time = std::chrono::high_resolution_clock::now();
+    m_clock.Pause();
     m_is_paused = true;
 }
 
 void AvPlayerSource::Resume() {
-    m_pause_duration += std::chrono::high_resolution_clock::now() - m_pause_time;
+    m_clock.Resume();
     m_is_paused = false;
 }
 
@@ -370,12 +367,68 @@ bool AvPlayerSource::GetVideoData(AvPlayerFrameInfo& video_info) {
     return true;
 }
 
+namespace {
+bool VideoTimingEnabled() {
+    static const bool enabled = [] {
+        const char* env = std::getenv("BB_AVPLAYER_TIMING_PROBE");
+        return env && env[0] == '1';
+    }();
+    return enabled;
+}
+}
+
+void AvPlayerSource::PrintVideoTiming() {
+    if (!VideoTimingEnabled()) return;
+    std::scoped_lock lock{m_video_timing_mutex};
+    const auto& t = m_video_timing;
+    std::printf("AvPlayer timing: %llu requests, shown %llu, empty %llu, future %llu, "
+                "inactive %llu, late (>100 ms) %llu, max late %llu ms, max ahead %llu ms\n",
+                static_cast<unsigned long long>(t.requests),
+                static_cast<unsigned long long>(t.shown),
+                static_cast<unsigned long long>(t.empty),
+                static_cast<unsigned long long>(t.future),
+                static_cast<unsigned long long>(t.inactive),
+                static_cast<unsigned long long>(t.late),
+                static_cast<unsigned long long>(t.max_late),
+                static_cast<unsigned long long>(t.max_ahead));
+}
+
+void AvPlayerSource::RecordVideoTiming(VideoOutcome outcome, u64 clock, u64 timestamp) {
+    if (!VideoTimingEnabled()) return;
+    bool report;
+    {
+        std::scoped_lock lock{m_video_timing_mutex};
+        auto& t = m_video_timing;
+        ++t.requests;
+        switch (outcome) {
+        case VideoOutcome::Inactive: ++t.inactive; break;
+        case VideoOutcome::Empty: ++t.empty; break;
+        case VideoOutcome::Future:
+            ++t.future;
+            if (timestamp > clock) t.max_ahead = std::max(t.max_ahead, timestamp - clock);
+            break;
+        case VideoOutcome::Shown:
+            ++t.shown;
+            if (clock > timestamp) {
+                const u64 lag = clock - timestamp;
+                t.max_late = std::max(t.max_late, lag);
+                t.late += lag > 100;
+            }
+            break;
+        }
+        report = t.requests % 128 == 0;
+    }
+    if (report) PrintVideoTiming();
+}
+
 bool AvPlayerSource::GetVideoData(AvPlayerFrameInfoEx& video_info) {
     if (!IsActive() || m_is_paused) {
+        RecordVideoTiming(VideoOutcome::Inactive);
         return false;
     }
 
     if (m_video_frames.Size() == 0) {
+        RecordVideoTiming(VideoOutcome::Empty);
         return false;
     }
 
@@ -383,9 +436,11 @@ bool AvPlayerSource::GetVideoData(AvPlayerFrameInfoEx& video_info) {
     const auto& new_frame = m_video_frames.Front();
     if (m_state.GetSyncMode() == AvPlayerAvSyncMode::Default) {
         if (new_frame.info.timestamp > current_time) {
+            RecordVideoTiming(VideoOutcome::Future, current_time, new_frame.info.timestamp);
             return false;
         }
     }
+    RecordVideoTiming(VideoOutcome::Shown, current_time, new_frame.info.timestamp);
 
     if (m_current_video_frame.has_value()) {
         m_video_buffers.Push(std::move(m_current_video_frame->buffer));
@@ -416,9 +471,7 @@ bool AvPlayerSource::GetAudioData(AvPlayerFrameInfo& audio_info) {
     }
 
     auto frame = m_audio_frames.Pop();
-    m_last_audio_ts = frame->info.timestamp;
-    m_last_data_time = std::chrono::high_resolution_clock::now();
-    m_pause_duration = std::chrono::high_resolution_clock::duration(0);
+    m_clock.NoteAudio(frame->info.timestamp);
 
     audio_info = {};
     audio_info.timestamp = frame->info.timestamp;
@@ -470,33 +523,11 @@ u64 AvPlayerSource::DurationMillis() const {
 }
 
 u64 AvPlayerSource::CurrentTime() {
-    if (!m_start_time.has_value()) {
-        return 0;
-    }
-
-    if (m_is_eof && !IsActive()) {
-        return m_duration;
-    }
-    if (!IsActive()) {
-        return 0;
-    }
-
-    using namespace std::chrono;
-    const auto now = m_is_paused.load() ? m_pause_time : high_resolution_clock::now();
-    if (m_audio_stream_index) {
-        const auto last_audio = m_last_data_time.value_or(now);
-        const auto elapsed =
-            duration_cast<milliseconds>(now - last_audio - m_pause_duration).count();
-        return m_last_audio_ts.value_or(0) + elapsed;
-    }
-
-    const auto elapsed =
-        duration_cast<milliseconds>(now - m_start_time.value() - m_pause_duration).count();
-    if (elapsed <= 0) {
-        return 0;
-    }
-    const auto current_time = u64(elapsed);
-    return m_duration != 0 && current_time > m_duration ? m_duration : current_time;
+    if (m_is_eof && !IsActive()) return m_duration;
+    if (!IsActive()) return 0;
+    const auto current_time = m_clock.CurrentTime(m_audio_stream_index.has_value());
+    return !m_audio_stream_index && m_duration != 0 && current_time > m_duration
+        ? m_duration : current_time;
 }
 
 bool AvPlayerSource::IsActive() {

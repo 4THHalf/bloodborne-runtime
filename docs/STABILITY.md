@@ -264,6 +264,63 @@ Across these seven observed openings, four had a reported white flash. None cras
 one of the watched assertions. The visual defect is not fixed, and these counts do not prove
 a regression against released v0.5.1.
 
+### Broader optimization baseline and clock investigation
+
+The documented optimization mask disables bits 0–19, 30 and 32–50
+(`2251796593508351`); it does not disable the movie-state guard or clear deferral.
+`flash_opts_off1` entered playback and failed with
+`GPU [Debug] <Critical> liverpool_to_vk.cpp:394 MipFilter: Unreachable code!`.
+This is a new sampler assertion, one occurrence so far, not one of the earlier SurfaceFormat
+or ExecuteCopyShaderHLE assertions. The mask was corrected during boot before the video;
+this trial is not a performance baseline. The next runs used the exact mask from startup.
+
+`flash_opts_off2` repeated the baseline with `BB_CB_PROBE=1 BB_CB_PROBE_US=1000` and
+completed without a fault; the maintainer did not watch it. `flash_opts_off3` repeated the
+same setup and completed; heavy stuttering was reported, but the flash count was not specified.
+Probe reports named main and GXRenderThread; no third movie-thread writer was found.
+Do not count either unknown flash result as a visual pass.
+
+The maintainer suggested audio/video synchronization as a possible explanation. Source review
+found unsynchronized reads and writes of the audio timestamp and host-time anchor in the old
+clock. A video request could observe a mismatched pair. Signed elapsed time was also added to
+an unsigned timestamp without guarding negative values. The new `PlaybackClock` uses one mutex
+for the anchor snapshot, samples a steady clock under that lock, handles pause/resume and
+restart, and clamps negative elapsed time and arithmetic overflow. This fixes a concrete clock
+data race; it does not establish that the white flash is fixed.
+
+`BB_AVPLAYER_TIMING_PROBE=1` records counts of shown frames, empty-queue waits, future-frame
+waits, inactive calls and frames more than 100 ms late, plus maximum lag/lead. It is off by
+default and records no frame contents or addresses. The normal `build.sh --test` flow includes
+`avplayer-clock-test`; it passed audio anchoring, pause/resume, restart, unsigned-boundary and
+concurrent snapshot checks, also under ThreadSanitizer. Runtime tests passed.
+
+For the clock A/B, the pre-fix host GPU library is preserved outside the checkout and selected
+only for the isolated control process. The opening helper now stamps the loaded GPU library's
+path and hash, rather than assuming the current build was loaded. `flash_clock_before1` was
+verified to load the preserved library and completed without a fault. Its visual result is
+unavailable. `flash_clock_after1` loaded the new clock build and failed during the movie with the same
+MipFilter assertion (second occurrence at that point). Its last timing record had 896 video requests,
+754 shown frames, zero empty-queue waits, 142 future-frame waits, zero frames more than 100 ms
+late, maximum lag 54 ms and maximum lead 16 ms. No SRT load fault was logged. The data do not
+show a large A/V backlog before this assertion; they do not establish visual acceptance of the
+clock fix. `BB_SAMPLER_PROBE=1` now identifies prepared/live descriptor origin and flattened
+index bounds for an invalid mip filter, without logging descriptor words or addresses. The
+translated/portable SRT comparison uses the same new clock and diagnostics in both modes.
+`flash_srt_off1` (translated) also failed with the same MipFilter assertion, the third occurrence.
+The sampler probe reported filter 3, stage 0, sampler 1, live rather than prepared descriptor
+values, a draw snapshot, and indices within the 28-word flattened buffer. This establishes
+that this assertion is not exclusive to the portable walker. `flash_srt_on1` (portable)
+completed without faults; its visual result is unavailable. Its last periodic timing record
+had 1,408 requests, 1,147 shown frames, no empty-queue waits or frames over 100 ms late,
+261 future-frame waits, maximum lag 56 ms and maximum lead 15 ms. These measurements do not
+show a major clock backlog in that trial; they do not establish a visual fix.
+
+The clock race repair is retained as a source-correctness fix with passing tests, including
+ThreadSanitizer on the standalone clock test. The opening video remains a release gate:
+invalid sampler provenance and resource lifetime need investigation, followed by observed
+visual checks and packaged-app testing. No renderer optimization has been disabled by default
+as a workaround, and no release has been tagged.
+
 Decoder-thread
 invalidation calls the rasterizer, but `DrainDrawPipe` only drains on stage A; cache locking and
 copy lifetime must be checked before changing this contract. Successful playback and

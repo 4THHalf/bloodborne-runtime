@@ -190,6 +190,11 @@ if (NOT APPLE)
 endif()
 
 # Explicit test targets; neither launches the game nor needs a Vulkan device.
+find_package(Threads REQUIRED)
+add_executable(avplayer-clock-test EXCLUDE_FROM_ALL ../tests/test_avplayer_clock.cpp)
+target_compile_options(avplayer-clock-test PRIVATE -UNDEBUG -Wall -Wextra -Werror)
+target_include_directories(avplayer-clock-test PRIVATE shadps4)
+target_link_libraries(avplayer-clock-test PRIVATE Threads::Threads)
 add_executable(fixed-quad-tessellation-test EXCLUDE_FROM_ALL ../tests/test_fixed_quad_tessellation.cpp)
 target_compile_options(fixed-quad-tessellation-test PRIVATE -UNDEBUG -Wall -Wextra -Werror)
 target_include_directories(fixed-quad-tessellation-test PRIVATE shadps4)

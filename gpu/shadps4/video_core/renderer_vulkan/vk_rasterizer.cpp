@@ -4088,10 +4088,34 @@ void Rasterizer::ForceAnisotropy(AmdGpu::Sampler& sharp, bool is_depth) const {
 
 void Rasterizer::BindSamplers(const Shader::Info& stage, const PreparedStage* prepared,
                               Shader::Backend::Bindings& binding, u32& write_index) {
+    static const bool probe = [] {
+        const char* env = std::getenv("BB_SAMPLER_PROBE");
+        return env && env[0] == '1';
+    }();
     for (u32 sampler_index = 0; sampler_index < stage.samplers.size(); ++sampler_index) {
         const auto& sampler = stage.samplers[sampler_index];
         auto ssharp =
             prepared ? prepared->sampler_sharps[sampler_index] : sampler.GetSharp(stage);
+        if (probe && ssharp.mip_filter.Value() != AmdGpu::MipFilter::None &&
+            ssharp.mip_filter.Value() != AmdGpu::MipFilter::Point &&
+            ssharp.mip_filter.Value() != AmdGpu::MipFilter::Linear) {
+            const auto flat = stage.FlatUserData();
+            bool bounds_ok = true;
+            for (u32 word = 0; word < sampler.sharp_fetch.N; ++word) {
+                if ((sampler.sharp_fetch.load_mask & (1u << word)) &&
+                    sampler.sharp_fetch.offsets[word] >= flat.size()) bounds_ok = false;
+            }
+            // Identify the descriptor path without recording addresses or descriptor words.
+            std::printf("Sampler probe: invalid mip filter %u, stage %u, sampler %u, "
+                        "prepared %u, flat bounds %u, flat words %zu, snapshot %u, "
+                        "mip word source %s\n",
+                        static_cast<u32>(ssharp.mip_filter.Value()),
+                        static_cast<u32>(stage.hw_stage), sampler_index, prepared ? 1u : 0u,
+                        bounds_ok ? 1u : 0u, flat.size(), stage.Snapshot() ? 1u : 0u,
+                        !(sampler.sharp_fetch.load_mask & (1u << 2)) ? "immediate"
+                            : sampler.sharp_fetch.offsets[2] < Shader::NUM_USER_DATA_REGS
+                                ? "register" : "table");
+        }
         ForceAnisotropy(ssharp, sampler.is_depth);
         const auto vk_sampler = texture_cache.GetSampler(
             ssharp, Regs().ta_bc_base, sampler.is_depth, sampler.is_depth ? 0.0f : sampler_lod_bias);

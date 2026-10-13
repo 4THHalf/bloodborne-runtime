@@ -42,11 +42,24 @@ if [[ -z $log ]] || ! rg -q "save data 'SPRJ0005' mounted" "$log"; then
 fi
 python3 - "$name" <<'BINARIES'
 from pathlib import Path
-import hashlib, json, sys
+import hashlib, json, sys, subprocess
 p=Path('out', 'stability_'+sys.argv[1]+'.json')
 m=json.loads(p.read_text())
 m['host_binaries']={str(f):hashlib.sha256(f.read_bytes()).hexdigest() for f in
                    (Path('out/bb-probe'),Path('recomp/out/libbbcpu.a')) if f.exists()}
+# Stamp the actually loaded GPU library too: a preserved pre-fix library can be selected
+# for A/B without rebuilding or changing the main checkout between runs.
+try:
+    pid=subprocess.check_output(['pgrep','-x','bb-probe'],text=True).split()
+    if len(pid)==1:
+        files=subprocess.check_output(['lsof','-Fn','-p',pid[0]],text=True,stderr=subprocess.DEVNULL)
+        for line in files.splitlines():
+            if line.startswith('n'):
+                f=Path(line[1:])
+                if f.name=='libbbgpu.dylib' and f.is_file():
+                    m['host_binaries'][str(f)]=hashlib.sha256(f.read_bytes()).hexdigest()
+except (OSError,subprocess.CalledProcessError):
+    m['gpu_library_stamp']='unavailable'
 p.write_text(json.dumps(m,indent=2)+'\n')
 BINARIES
 sleep 15
@@ -77,7 +90,7 @@ import sys,re,json
 from pathlib import Path
 name,path=sys.argv[1:]
 s=Path(path).read_text(errors='replace')
-result={'run':name,'log':str(Path(path).resolve()),'movie_entered':bool(re.search(r"Mv_AudioPlayThread.*created",s)), 'playback_stop':bool(re.search(r"Stop: Could not stop playback: already stopped",s)),'faults':[x for x in s.splitlines() if re.search(r"^(Fault|Guest fault|Host fault) \(signal|^  thread |ExecuteCopyShaderHLE.*Assertion Failed|Unknown data_format=|^STOP:",x)]}
+result={'run':name,'log':str(Path(path).resolve()),'movie_entered':bool(re.search(r"Mv_AudioPlayThread.*created",s)), 'playback_stop':bool(re.search(r"Stop: Could not stop playback: already stopped",s)),'faults':[x for x in s.splitlines() if re.search(r"^(Fault|Guest fault|Host fault) \(signal|^  thread |ExecuteCopyShaderHLE.*Assertion Failed|Unknown data_format=|^GPU .*<Critical>.*(?:Assertion Failed|Unreachable code!)|^STOP:",x)]}
 print(json.dumps(result))
 if not result['movie_entered']:
     raise SystemExit(3)

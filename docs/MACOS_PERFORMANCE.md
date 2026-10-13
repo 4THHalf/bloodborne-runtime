@@ -111,7 +111,12 @@ one bright white flash in four runs. Clear deferral, draw pipelining and specula
 were compared in alternating pairs; none established a cause. Stuttering was also reported.
 All seven completed without faults or watched GPU assertions. These were visual checks, not FPS
 benchmarks; [stability notes](STABILITY.md) record each observation and the opt-in host-copy
-probe. Its first trial reported no registered-copy overlap, but playback still flashed. No renderer setting was changed by default on this evidence.
+probe. Its first trial reported no registered-copy overlap, but playback still flashed. No renderer setting was changed by default on this evidence. Further diagnostic trials hit a
+new `MipFilter` assertion three times, including with the translated SRT walker. A separate
+clock data race was repaired with a mutex-protected steady-clock anchor. The new clock's
+portable comparison completed with no queue starvation or frames over 100 ms late; the last
+periodic maximum lag was 56 ms. Visual acceptance is still pending, and the sampler failure
+remains unresolved. Details and test limitations are in the stability notes.
 
 Three capped 40 FPS, untraced `HOLD=90` gameplay pairs had identical 25.0 ms p90. Mean CPU was
 395.7% off versus 397.7% on (about 0.5% higher); stage B averaged 3.69 versus 3.72 µs/draw.
