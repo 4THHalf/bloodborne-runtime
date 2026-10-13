@@ -212,3 +212,8 @@ The packaged 0.6.0 launcher first-profile/Home check subsequently passed on 2026
 synthetic data: the maintainer confirmed the active Release QA profile and version 0.6.0;
 SQLite foreign-key checks were clear. Clean-machine Gatekeeper/upgrade UI remains untested.
 This is launcher QA; no renderer code or game runtime behavior changed after the game batch.
+
+App 0.6.0 is published from app bdf9589 with runtime 08bffeb, launcher 2e13892 and recompiler
+ac2931c. Release CI 38399743268 passed and the prepared changelog/DMG were published. The
+previous stability and packaged-launcher checks apply; N4 remains paused and historical rare
+fault counts remain on the watch list.

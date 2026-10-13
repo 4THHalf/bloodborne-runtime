@@ -1,5 +1,14 @@
 # Opening-video stability
 
+## Release 0.6.0 (2026-10-13)
+
+[Bloodborne for Apple Silicon 0.6.0](https://github.com/bloodborne-native/bloodborne-mac/releases/tag/v0.6.0)
+was published from app `bdf9589`, launcher `2e13892`, runtime `08bffeb` and recompiler `ac2931c`.
+[Release CI](https://github.com/bloodborne-native/bloodborne-mac/actions/runs/38399743268)
+passed and published the Apple Silicon DMG with the prepared changelog. The accepted game and
+packaged-launcher checks below cover this release; historical faults and untested clean-machine
+Gatekeeper/upgrade behavior remain documented. N4 remains paused.
+
 ## Latest check (2026-10-13)
 
 The pre-release repeat passed five observed default-renderer openings and two self-contained
