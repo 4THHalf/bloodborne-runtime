@@ -207,3 +207,8 @@ bloodborne-mac. On macOS the
   a script file instead).
 - **Docs:** plain, precise English; numbers measured, not guessed. When a milestone or a measured
   number changes, update the docs and the wiki status pages (progress bars: 20 blocks, one per 5%).
+
+The packaged 0.6.0 launcher first-profile/Home check subsequently passed on 2026-10-13 with
+synthetic data: the maintainer confirmed the active Release QA profile and version 0.6.0;
+SQLite foreign-key checks were clear. Clean-machine Gatekeeper/upgrade UI remains untested.
+This is launcher QA; no renderer code or game runtime behavior changed after the game batch.

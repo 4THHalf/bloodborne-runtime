@@ -596,3 +596,14 @@ runtime contracts and ordering they depend on. Analysis output, guest code, stac
 memory records stay outside Git and the wiki. A fix must pass the runtime tests and repeated
 isolated opening-video trials before it is accepted. N4 stays paused until stability is resolved
 or the maintainer chooses the release's known-issue policy.
+
+## Packaged launcher release check (2026-10-13)
+
+The 0.6.0 package's native launcher was opened with a fresh synthetic data directory selected
+by `BB_LAUNCHER_DATA_DIR`; player saves/settings were not used. The maintainer created
+“Release QA” and confirmed Home, the active profile and version 0.6.0. The synthetic SQLite
+database contained the profile and had no foreign-key violations. All 39 launcher native
+tests, frontend checks/build and Clippy passed. The local DMG build passed deep/strict signature
+verification. This closes the first-profile/Home check on this Mac; clean-machine Gatekeeper
+behavior and a complete upgrade UI on another Mac remain unverified. The runtime binaries
+are the same ones used in the preceding game acceptance batch.
