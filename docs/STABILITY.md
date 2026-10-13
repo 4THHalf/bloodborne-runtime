@@ -194,6 +194,12 @@ The script returns failure for a fault or incomplete playback, and separately id
 navigation attempts that never entered the movie. Tell the user before batches and check
 `pgrep -x bb-probe` first. Never capture the user's screen.
 
+Navigation waits for the bench driver's title inputs to finish, then uses two-second menu
+settle times instead of the previous 15- and 20-second pauses. `VIDEO_MENU_WAIT` and
+`VIDEO_SETUP_WAIT` can increase those delays for slow boots. After the final press it polls
+for movie entry for up to ten seconds, returning immediately when entry is logged. These
+timing changes passed shell syntax checks; game navigation has not yet been rechecked.
+
 The user reported poor video frame rate before crashes. The last pacing windows in
 `faultstate1` and `faultstate2` had p99 values of 118.05 and 51.36 ms. Cold pipeline compilation
 still causes hitches: one guarded movie window compiled two pipelines for 348.1 ms and reported

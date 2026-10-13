@@ -62,15 +62,35 @@ except (OSError,subprocess.CalledProcessError):
     m['gpu_library_stamp']='unavailable'
 p.write_text(json.dumps(m,indent=2)+'\n')
 BINARIES
-sleep 15
+# Wait for the bench driver's two title presses before sending menu input. This avoids
+# overlapping pad writes without the old fixed 15-second pause after the save mount.
+title_ready=0
+for ((i=0;i<120;i++)); do
+    if [[ -f out/test_$name.txt ]] && rg -q '^title input complete$' "out/test_$name.txt"; then
+        title_ready=1
+        break
+    fi
+    if ! kill -0 "$run_pid" 2>/dev/null; then break; fi
+    sleep 1
+done
+if [[ $title_ready != 1 ]]; then
+    wait "$run_pid" || true
+    printf '%s invalid: title input did not complete; log=%s\n' "$name" "$log"
+    exit 3
+fi
+# Short settle times; increase these on a slow boot if navigation misses a menu.
+sleep "${VIDEO_MENU_WAIT:-2}"
 tools/press.sh down 0.1
 sleep 0.6
 tools/press.sh cross 0.1
-sleep 20
+sleep "${VIDEO_SETUP_WAIT:-2}"
 tools/press.sh up 0.1
 sleep 0.8
 tools/press.sh cross 0.1
-sleep 10
+for ((i=0;i<10;i++)); do
+    if rg -q "Mv_AudioPlayThread.*created" "$log" || ! kill -0 "$run_pid" 2>/dev/null; then break; fi
+    sleep 1
+done
 if pgrep -x bb-probe >/dev/null && ! rg -q "Mv_AudioPlayThread.*created" "$log"; then
     tools/grab.sh "${name}_navigation" || true
 fi

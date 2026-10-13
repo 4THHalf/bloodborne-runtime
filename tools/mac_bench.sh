@@ -31,6 +31,7 @@ for i in $(seq 1 ${BOOT_WAIT:-240}); do
 done
 sleep "${TITLE_WAIT:-6}"
 tools/press.sh cross; sleep "${PRESS_GAP:-6}"; tools/press.sh cross
+echo 'title input complete'
 # Level: a scene with many draws.
 start=$(date +%s)
 for i in $(seq 1 $(( ${LEVEL_WAIT:-240} / 2 ))); do
