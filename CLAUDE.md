@@ -62,9 +62,11 @@ Two uncapped pairs favored off; later capped comparisons did not show a repeatab
 regression. `BB_IMAGE_UPLOAD_HASH_STATS=1` measures aggregate calls, bytes and elapsed
 hash-path time without guest addresses or contents. Four recurring large writable mip
 checks cost about 0.05–0.06 ms per frame at 40 FPS in Central Yharnam. The larger uncapped
-difference is unresolved; retain full checks and the off default. Details are in
+difference is unresolved. An uncapped trace pair showed similar encoder counts and no
+increase in GPU busy time on; post-trace holds measured 47.2/46.9 FPS off/on. Use
+`tools/mst_passes.py TRACE --complete-frames` for counted normalization. Retain full checks
+and the off default. Details are in
 `docs/MACOS_PERFORMANCE.md`. N4 remains paused.
-
 
 Bisect bbport's optimizations first: `BB_TOGGLE_FILE` holds a mask of switches (bits 0–19, 30,
 32–50; re-read every 250 ms); run with all off, then halve groups with one fixed mask per run.

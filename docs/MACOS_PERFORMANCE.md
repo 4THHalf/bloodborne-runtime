@@ -320,3 +320,53 @@ Full hashes are retained. Reusing a previous digest based only on `CpuDirty` wou
 proven invalidation rule covering guest writes, host writebacks and GPU writes into imported
 backing memory. The current counters cannot prove that rule. No sampling of only part of an
 image, unchecked digest reuse or renderer migration was introduced; N4 remains paused.
+
+### Uncapped GPU trace comparison (2026-10-13)
+
+`hashgpu_off` and `hashgpu_on` used the same copied-save Central Yharnam position, uncapped
+presentation, pass labels and disabled hash counters. Each requested a three-second Metal
+System Trace, then held the game for 45 seconds after trace finalization. Both recordings
+saved successfully and both game runs completed without faults, GPU assertions or
+invalid-mutex panics. The diagnostics commit `cd245ed` also passed Linux and macOS CI.
+
+The trace reader now supports `python3 tools/mst_passes.py TRACE --complete-frames`. It
+uses command-buffer frame assignments and presentation markers, excludes the first/last
+matched frames and requires contiguous frame numbers and unambiguous assignments. No
+unassigned GPU intervals occurred inside either selected window. The selected GPU spans
+were 4.856 and 5.488 seconds, covering 168 and 205 complete Metal frames. These are observed
+GPU intervals, not the requested recording duration. Their frame rates were 34.60/37.35 FPS;
+normalizing with an assumed 48 FPS would undercount work per frame. Six synthetic tests
+cover frame selection and invalid metadata without storing any game trace records.
+
+| Trace measurement per complete Metal frame | Off | On |
+|---|---|---|
+| Encoders | 502.9 | 499.8 |
+| GPU-active command buffers | 7.02 | 6.77 |
+| GPU busy (union of intervals) | 18.70 ms | 18.17 ms |
+| Idle inside command buffers | 5.92 ms | 6.03 ms |
+| Idle between command buffers | 4.28 ms | 2.56 ms |
+| Game compute-dispatch encoders | 96.53 | 96.51 |
+| Vertex/hull tessellation compute encoders | 58.95 | 57.15 |
+| Buffer-copy encoders | 74.28 | 74.51 |
+| Buffer-to-image encoders | 5.00 | 5.00 |
+| Separate color-clear encoders | 13.99 | 14.00 |
+
+The principal compute/copy/clear counts matched closely. A few render and tessellation
+encoders differed, but total encoder count and GPU busy time did not increase with capture
+on. The traced frame-rate difference was dominated by less idle between command buffers
+in the on recording. This is one traced pair with profiler overhead and scene variation;
+it does not establish a speedup or explain the earlier untraced slowdown. No renderer
+optimization or default change was made from this trace.
+
+| Post-trace 45-second hold | Off | On |
+|---|---|---|
+| Mean FPS by frame times | 47.2 | 46.9 |
+| Frame-time p90 | 22.9 ms | 23.2 ms |
+| Sampled game CPU | 498% | 496% |
+| Stage B, final eight log windows | 4.42 us/draw | 4.44 us/draw |
+
+These holds started after the recordings finalized. The bench's overall frame-stat summary
+also includes tracing/finalization and is not the hold-only FPS reported above. The new
+untraced portion still slightly favored off; the earlier larger difference remains unresolved.
+One off-mode game frame was captured; no new paired visual or character-creation acceptance
+was performed. Baseline capture remains opt-in and N4 remains paused.

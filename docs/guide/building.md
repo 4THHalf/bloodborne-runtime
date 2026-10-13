@@ -56,6 +56,9 @@ The macOS app (launcher, DMG, releases) is
 - `tools/mac_bench.sh NAME [VAR=VALUE...]`: starts the game in the background, enters the level
   and prints frame-time statistics.
 - `tools/mst_summary.py`, `tools/mst_passes.py`: read Metal System Traces.
+  `python3 tools/mst_passes.py TRACE --complete-frames` counts frames from the trace's
+  command-buffer frame assignments, excludes boundary frames and validates the selected window.
+  The optional numeric FPS argument retains the older estimated normalization.
 - `tools/grab.sh [--screen] NAME`: saves the game's own frame as a PNG (`--screen` includes the
   in-game menu, which `touch out/menu.trigger` opens).
 - `python3 -m unittest discover -s tests`: the Python tests.

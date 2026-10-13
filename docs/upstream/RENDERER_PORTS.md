@@ -59,3 +59,11 @@ capped off/on comparisons, one instrumented and one with counters off, did not s
 repeatable stage-B/game-CPU regression. The earlier uncapped difference remains unresolved,
 so capture remains opt-in. Full hash checks are retained; no unsafe digest caching was added.
 Details: [macOS performance](../MACOS_PERFORMANCE.md#hash-cost-diagnosis-and-capped-repeat-2026-10-13).
+
+A subsequent uncapped off/on Metal trace pair, normalized to 168/205 complete Metal frames,
+measured 502.9/499.8 encoders and 18.70/18.17 ms GPU busy time per frame. Main dispatch,
+copy and clear counts matched closely; the trace did not show increased GPU work on.
+Post-trace holds measured 47.2/46.9 FPS and 22.9/23.2 ms p90. The earlier larger uncapped
+difference remains unresolved; keep baseline capture opt-in. The trace reader's new
+`--complete-frames` option and six synthetic tests make the normalization reproducible.
+[Measurements and limits](../MACOS_PERFORMANCE.md#uncapped-gpu-trace-comparison-2026-10-13).

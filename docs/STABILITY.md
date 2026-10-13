@@ -655,3 +655,10 @@ capped CPU comparisons are recorded in
 [macOS performance](MACOS_PERFORMANCE.md#hash-cost-diagnosis-and-capped-repeat-2026-10-13).
 Baseline capture remains opt-in. No new opening-video or visual acceptance was performed,
 and historical watch counts are unchanged.
+
+The uncapped GPU comparison (`hashgpu_off`, `hashgpu_on`) saved both Metal traces and
+completed both 45-second post-trace holds without faults, GPU assertions or invalid-mutex
+panics. Complete-frame normalization showed similar encoder counts and no increase in GPU
+busy time with baseline capture on. This is not visual or opening-video acceptance.
+Baseline capture remains opt-in, and historical watch counts are unchanged. Full measurements:
+[macOS performance](MACOS_PERFORMANCE.md#uncapped-gpu-trace-comparison-2026-10-13).
