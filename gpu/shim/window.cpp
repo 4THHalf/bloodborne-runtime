@@ -174,6 +174,21 @@ void WindowSDL::UpdateTextTitle() {
 }
 
 bool WindowSDL::PollEvents() {
+    // Notifications use SDL geometry, including fullscreen display bounds. No screen capture.
+    if (notification_window_callback && SDL_GetTicks() - notification_window_at >= 250) {
+        notification_window_at = SDL_GetTicks();
+        int x=0,y=0,w=0,h=0;
+        const auto flags=SDL_GetWindowFlags(window);
+        bool located=SDL_GetWindowPosition(window,&x,&y) && SDL_GetWindowSize(window,&w,&h);
+        if (flags & SDL_WINDOW_FULLSCREEN) {
+            SDL_Rect rect{};
+            located=SDL_GetDisplayBounds(SDL_GetDisplayForWindow(window),&rect);
+            x=rect.x; y=rect.y; w=rect.w; h=rect.h;
+        }
+        const bool visible=located && window_info.type != WindowSystemType::Wayland && (flags & SDL_WINDOW_INPUT_FOCUS) &&
+            !(flags & (SDL_WINDOW_HIDDEN | SDL_WINDOW_MINIMIZED));
+        notification_window_callback(x,y,w,h,visible);
+    }
     {
         std::scoped_lock lock{text_mutex};
         if (text_requested) { // SDL text input must be toggled from the window thread

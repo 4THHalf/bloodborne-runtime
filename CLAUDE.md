@@ -58,6 +58,11 @@ inside the selected save subtree before granting an unlock; a launcher environme
 re-enable an edited save. Preserve earned history across restores. Online access restrictions
 for edited saves are undecided; do not add one without the maintainer's decision.
 
+Public trophy names/grades are permitted by the maintainer; extracted metadata, game artwork
+and keys are not included. The launcher catalog records public locale sources and uses English
+fallback until a translation is verified. The standalone helper receives only accepted IDs and
+SDL window metadata. Keep its host queue bounded and persistence independent of display.
+
 ## Native renderer
 
 `docs/NATIVE_RENDERER.md`: milestone R5, the engine's graphics on each platform's own API (steps

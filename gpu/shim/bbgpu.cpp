@@ -266,6 +266,11 @@ static void StartProfileWriter() {
 }
 #endif
 
+extern "C" void bbgpu_notification_window_callback(void (*callback)(int,int,int,int,int)) {
+    // Set once before the window thread starts.
+    Frontend::WindowSDL::notification_window_callback = callback;
+}
+
 extern "C" int bbgpu_init(const BbGpuConfig* config) {
     BbSettings::Load();
     // What the translator knows about this game (games/), before anything asks for it.

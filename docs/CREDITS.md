@@ -79,3 +79,10 @@ By Kyo, Lance McDonald, auser1337, illusion, emoose and other community members
 
 This project is not affiliated with shadPS4, Sony Interactive Entertainment, FromSoftware or AMD.
 *Bloodborne* is a trademark of Sony Interactive Entertainment. No game files are included.
+
+The local platinum/base-DLC ID grouping follows the public launcher mapping in
+[Supermedo/bloodborne_pc `79d44f0`](https://github.com/Supermedo/bloodborne_pc/commit/79d44f0eecc2eed45c1e33b48996e53626adca48)
+by Ambrose (GPL-2.0-or-later), cross-checked against public trophy lists. The launcher credits
+its public names/grade sources and original requirement summaries separately. The runtime
+notification worker and SDL geometry bridge are project code; no trophy files/artwork or keys
+were extracted or included.
