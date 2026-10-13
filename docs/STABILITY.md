@@ -399,6 +399,59 @@ ExecuteCopyShaderHLE or SurfaceFormat assertion appeared in this batch. The enqu
 probe did not trigger, so it has not established where that corruption starts. N4 and release
 acceptance remain paused; these results do not establish a white-flash fix.
 
+### Queue and shutdown follow-up (2026-10-13)
+
+`BB_PTHREAD_PROBE=1` now traces entry, return after TLS cleanup, join and detach for guest
+threads whose names start with `Mv_`. It also retains the last 128 successful mutex-destruction
+records. On an invalid use of a destroyed slot, it can report the most recent recorded
+destructor's thread and elapsed time. This bounded diagnostic does not extend mutex lifetime,
+change errors or log handles, addresses or guest memory. A missing record proves nothing.
+
+All trials below used isolated fresh saves, no Metal trace and `BB_CB_PROBE=0`. The first
+five used the same pre-queue-repair GPU library, with shutdown and sampler probes enabled.
+
+| Run | Draw pipeline / submission lock | Outcome | User observation |
+| --- | --- | --- | --- |
+| `video_lifecycle_off1` (`1013_110955`) | Off / decode | Normal stop, audio entry returned before main detached it | Perfect playback |
+| `video_lifecycle_on1` (`1013_111227`) | On / decode | MipFilter assertion during the movie | Crash |
+| `video_lock_gpu1` (`1013_111429`) | On / GPU completion | Normal stop and return-before-detach | Two flashes, at beginning and end |
+| `video_lock_decode1` (`1013_111700`) | On / decode | Normal stop and return-before-detach | Perfect playback |
+| `video_lock_gpu2` (`1013_111946`) | On / GPU completion | Normal stop and return-before-detach | Slight initial stutter, then fine playback |
+
+The sampler assertion is the fifth occurrence. `video_lifecycle_on1` captured the invalid
+filter **at stage-A enqueue**, before stage B bound it. Both reports described a table-sourced
+mip word, valid flattened indices and stage 0, sampler 1. Binding used prepared values and a
+draw snapshot. This occurrence did not originate from later corruption of the queued draw
+snapshot; the table lifetime and population before enqueue still need investigation. There
+was no periodic video-timing record before this failure.
+
+Strict GPU-completion locking did not eliminate flashes. The three alternating lock-mode
+trials all completed, so they do not establish a fault-rate improvement. Their last periodic
+maximum lag was 342/62/575 ms for GPU/decode/GPU locking. No default was changed on this
+comparison; these are playback diagnostics, not gameplay performance gates.
+
+The queue-control retry, `video_queue_before2` (`1013_112637`), loaded the saved pre-fix GPU
+library (hash prefix `2c687e6d14f3`) and completed normally. Its playback was not watched.
+`video_queue_before1` never launched: prebuilt mode selected the packaged `bin/bb-probe`, which
+is absent in this development checkout. It is excluded from game results. The retry supplied
+the explicit development executable; the helper stamped the actually loaded GPU library.
+
+The maintainer requested a repeat. `video_queue_before3` (`1013_112859`) looked perfect, then
+faulted during shutdown. It captured:
+
+```text
+Pthread probe: mutex destruction by main 13.374 ms before invalid use
+Pthread probe: mutex_lock returned EINVAL (destroyed handle), thread Mv_AudioPlayThread
+Logical Error. Invalid mutex.(EINVAL)
+```
+
+No movie audio-thread return or detach was logged before the fault. The last periodic video
+record had 1,536 requests, 1,145 shown frames, no frames over 100 ms late, maximum lag 36 ms
+and lead 13 ms. A large video backlog is therefore not required for this shutdown fault.
+This is the third recorded audio-thread invalid-mutex panic. The next target is the destructor
+and thread-stop ordering that allows main to destroy the state while the audio thread can
+still use it. Caller analysis is for understanding only; no guest code or memory is published.
+
 ## Investigation boundary
 
 Use Ghidra to understand the null pointer's callers and the state they read, then check the

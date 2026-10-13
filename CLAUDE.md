@@ -101,8 +101,9 @@ Stability docs record the results and diagnostic limits; do not infer visual cor
 crash-free playback.
 
 One additional optimization-baseline trial, `flash_opts_off1`, stopped during the video with
-`GPU [Debug] <Critical> liverpool_to_vk.cpp:394 MipFilter: Unreachable code!` (four occurrences: `flash_opts_off1`,
-`flash_clock_after1`, translated-walker `flash_srt_off1` and `flash_resume1`).
+`GPU [Debug] <Critical> liverpool_to_vk.cpp:394 MipFilter: Unreachable code!` (five occurrences: `flash_opts_off1`,
+`flash_clock_after1`, translated-walker `flash_srt_off1`, `flash_resume1` and
+`video_lifecycle_on1`).
 Repeated baselines with the command-buffer probe completed; flash counts were unavailable.
 Clock review found an unsynchronized audio timestamp/anchor pair. The clock now uses a mutex
 and steady host time; standalone tests also pass under ThreadSanitizer.
@@ -118,9 +119,15 @@ and logged `ensure_mutex` returning EINVAL; its playback had looked perfect befo
 The paired pipeline-off runs completed and were reported as perfect. `BB_PTHREAD_PROBE=1`
 logs EINVAL operations; mutex validation now distinguishes null handle slots from destroyed
 handles (that distinction is not yet game-validated). `BB_SAMPLER_PROBE=1` also checks invalid
-filters at draw enqueue, to distinguish stage-A input from later binding. The enqueue check has
-not yet triggered. Keep these shutdown panics separate from the earlier null-read and GPU
+filters at draw enqueue, to distinguish stage-A input from later binding. The enqueue check caught the fifth sampler assertion before stage B used the snapshot. Keep these shutdown panics separate from the earlier null-read and GPU
 assertions. Stability docs list all five new trials and their limits.
+`video_queue_before3` also faulted on the audio thread after apparently perfect playback. Its
+trace confirmed `mutex_lock` on a destroyed handle: main destroyed that slot 13.374 ms before
+the invalid use, before a movie audio-thread return was logged. There are now three such
+shutdown panics. The last periodic lag was only 36 ms. The 128-record destruction history
+and `Mv_` lifecycle trace are opt-in under `BB_PTHREAD_PROBE=1`; absence of a record is not
+proof of safety. Strict `BB_SUBMIT_LOCK=gpu` trials completed, but one still flashed twice,
+so no submission-lock default was changed. Stability docs record the full comparisons.
 
 ## Upstream merges
 
