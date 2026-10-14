@@ -913,3 +913,21 @@ repeated alternating controls because the patch changes workload and timing too.
 The preceding repaired synchronization trial `geom_unified_sync3` reached the level and
 ended with a requested window close. No visual/teleport acceptance report was obtained; do not
 claim that its hash-path repair passed teleport or prevented geometry corruption.
+
+`geom_facegen_disabled1` ended early with `Window: closed (quit requested)`, an SDL quit
+event. No guest fault, GPU assertion or device-loss report was logged, and no manual stop
+command was sent before that exit. The final hold sample with a live game CPU value was 178;
+the old runner continued writing empty CPU samples afterwards. It had not reached the
+1,800-sample limit. The maintainer saw no vertex explosion before it closed, but this short
+trial is inconclusive relative to the control's reproduction at sample 385. The origin of
+the quit event is unknown; do not classify it as a proven crash or clean route acceptance.
+
+The runner now checks its owned launcher during the hold and records its exit status on an
+early exit. Startup refuses an existing game; shutdown targets the owned launcher and its
+bb-probe child when run.sh uses a mod view, rather than all bb-probe processes. A mock runner
+exiting with status 7 during the hold verified immediate failure reporting and no completed
+performance summary; no game was launched by that check. Shell syntax checks pass.
+
+`geom_facegen_disabled2` repeats the same disabled settings after the incomplete trial;
+this is not a second accepted on result. The original copied save is restored for the retry,
+and its route result is pending. The public patch remains only in ignored test output.

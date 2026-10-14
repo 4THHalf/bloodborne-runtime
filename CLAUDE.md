@@ -329,3 +329,10 @@ without a new assertion or command-buffer overlap. `geom_facegen_disabled1` is p
 Kyo's temporary external Disable Facegen patch differs. Keep synchronization off, Relaxed
 readbacks, six preparation workers and pipeline off in both. Do not call the patch a fix
 without repeated controls, and do not add its bytes or game-derived diagnostics to Git.
+
+`geom_facegen_disabled1` exited early with an SDL quit event, no logged fault/assertion and
+no preceding manual stop. Last live CPU hold sample 178; the maintainer saw no explosion,
+but the trial is too short for acceptance and quit origin is unknown. The runner now reports
+owned-launcher early exit status immediately and targets only owned processes on shutdown.
+A mock status-7 check passed. `geom_facegen_disabled2` repeats the incomplete on trial with
+the same copied save/settings; result pending. No FaceGen workaround/default is accepted.
