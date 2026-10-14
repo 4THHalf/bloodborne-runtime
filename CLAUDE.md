@@ -255,3 +255,40 @@ App 0.6.0 is published from app bdf9589 with runtime 08bffeb, launcher 2e13892 a
 ac2931c. Release CI 38399743268 passed and the prepared changelog/DMG were published. The
 previous stability and packaged-launcher checks apply; N4 remains paused and historical rare
 fault counts remain on the watch list.
+
+On 2026-10-13, Central Yharnam's bridge/house route reproduced stretched geometry after
+visiting multiple areas, including an area with new enemies. Restarting restores the scene.
+`geom_pipe_on2` reproduced around hold sample 424 and `geom_pipe_off1` around sample 138;
+pipeline-off from startup is not a workaround. Live pipeline/cache bypass did not repair the
+first corrupted scene. No GPU assertion or command-buffer overlap was reported. The bounded
+`BB_IMAGE_ALIAS_PROBE=1` diagnostic investigates oversized image-to-buffer alias transfers;
+its relationship to this corruption is not established. STABILITY records the settings and
+limits. Reproduce with area transitions, not a stationary hold; keep N4 paused.
+
+On 2026-10-14, `geom_alias_off1` reproduced stretched scenery with the pipeline off, reported
+at hold sample 548. The image-alias size probe recorded 32,768 transfers and no oversized
+transfer at onset. This rejects the oversized-copy candidate for that run, not stale aliases
+or lifetime errors. The interior capture did not clearly show the affected scenery; the
+maintainer confirmed the symptom. `geom_gpu_lock1` also reproduced (hold sample 259), confirmed by a game-frame dump,
+with zero oversized transfers at the latest 16,384-transfer counter and no new assertion.
+The maintainer reports more frequent onset entering/leaving dark places. GPU-completion
+locking is not a workaround. The copy-hoisting-off comparison is pending; no default has changed. Keep missing objects separate from confirmed vertex explosion.
+
+`geom_hoist_off1` reproduced at hold sample 259 after loading more enemies, with a confirming
+frame dump, no new assertion and zero oversized copies at the latest 16,384-transfer count.
+Copy-hoisting-off is not a workaround. The startup texture-shortcut group comparison
+`geom_texture_safe1` is pending; narrow any positive result before changing defaults.
+
+Unified-memory audit: GPU-write ticks gate renderer bindings, but unified buffer CPU
+invalidation/readback returns skip the old page-state/wait path. This is a synchronization
+coverage gap, not a proven cause of vertex explosion. `BB_UNIFIED_ACCESS_PROBE=1` counts
+notified CPU accesses over unfinished writes (refreshing completion first), without addresses
+or contents. It cannot see unnotified guest loads/stores or physical aliases. Normal tests pass;
+`geom_unified_probe1` is pending and no waits/defaults changed. See STABILITY before proceeding.
+
+`geom_unified_probe1` also reproduced per the maintainer, with unknown onset (the run had
+already completed its hold). Three coarse pending-write notifications were 8-byte accesses;
+these may be neighboring bytes within the 64 KiB tick granule, not an exact overlap. No read
+notifications were counted. The refined probe compares the last 4,096 declared write bindings;
+`geom_unified_exact1` is pending. No synchronization fix is claimed. `grab.sh` now rejects a
+trigger timeout instead of relabeling an older raw dump; the post-exit capture was excluded.

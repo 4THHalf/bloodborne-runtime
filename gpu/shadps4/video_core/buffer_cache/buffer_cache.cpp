@@ -3,6 +3,7 @@
 
 #include <chrono>
 #include <array>
+#include <atomic>
 #include <map>
 #include <unordered_map>
 #include <algorithm>
@@ -69,6 +70,48 @@ static bool LayerTranslate(uint64_t va, uint64_t* phys, uint64_t* end) {
 namespace VideoCore {
 
 namespace {
+bool UnifiedAccessProbeEnabled() {
+    static const bool enabled = [] {
+        const char* value = std::getenv("BB_UNIFIED_ACCESS_PROBE");
+        return value && std::strcmp(value, "1") == 0;
+    }();
+    return enabled;
+}
+
+// Diagnostic history of declared write bindings, not their contents. The bounded history
+// can miss older bindings; a negative lookup is not proof that the range was never written.
+struct UnifiedWriteProbeHistory {
+    struct Range {
+        u64 address{}, size{}, tick{};
+    };
+    static constexpr size_t Capacity = 4096;
+    std::array<Range, Capacity> ranges{};
+    std::mutex mutex;
+    u64 count{};
+
+    void Note(u64 address, u64 size, u64 tick) {
+        std::scoped_lock lock{mutex};
+        ranges[count++ % Capacity] = {address, size, tick};
+    }
+
+    std::pair<u64, u64> Newest(u64 address, u64 size) {
+        std::scoped_lock lock{mutex};
+        u64 newest = 0;
+        for (const auto& range : ranges) {
+            if (range.size && address < range.address + range.size &&
+                range.address < address + size) {
+                newest = std::max(newest, range.tick);
+            }
+        }
+        return {newest, count > Capacity ? count - Capacity : 0};
+    }
+};
+
+UnifiedWriteProbeHistory& UnifiedWriteHistory() {
+    static UnifiedWriteProbeHistory history;
+    return history;
+}
+
 // bbport: the tick of the newest GPU write per 64 KiB of guest memory, per 1 MiB for writes over
 // 16 MiB (ObtainBuffer with is_written: the only place ranges become GPU-modified). A readback
 // waits for that submission only and copies on the readback queue, not behind the queued
@@ -96,6 +139,9 @@ struct GpuWriteTicks {
     void Note(u64 address, u64 size, u64 tick) {
         if (size == 0 || (address + size - 1) >> AddressBits) {
             return;
+        }
+        if (UnifiedAccessProbeEnabled()) {
+            UnifiedWriteHistory().Note(address, size, tick);
         }
         auto& table = size <= FineLimit ? fine : coarse;
         for (u64 page = address >> table.shift; page <= (address + size - 1) >> table.shift;
@@ -134,6 +180,45 @@ struct GpuWriteTicks {
 GpuWriteTicks& WriteTicks() {
     static GpuWriteTicks write_ticks;
     return write_ticks;
+}
+
+// Notifications can be before or after a host write; this measures unfinished GPU work,
+// not simultaneous stores. Unified memory still needs ordering even without a readback copy.
+void ProbeUnifiedCpuAccess(Vulkan::Scheduler& scheduler, VAddr address, u64 size, bool is_write) {
+    if (!UnifiedAccessProbeEnabled() || size == 0) {
+        return;
+    }
+    static std::atomic<u64> notifications{0}, coarse_hits{0}, pending_reads{0}, pending_writes{0};
+    const u64 tick = WriteTicks().Newest(address, size);
+    const auto [exact_tick, replaced] = UnifiedWriteHistory().Newest(address, size);
+    auto* completion = scheduler.GetWorkSemaphore();
+    if (!completion->IsFree(std::max(tick, exact_tick))) {
+        completion->Refresh(); // Do not count a stale cached completion value as pending work.
+    }
+    const bool coarse_pending = tick && !completion->IsFree(tick);
+    const bool pending = exact_tick && !completion->IsFree(exact_tick);
+    const u64 coarse_count = coarse_pending
+        ? coarse_hits.fetch_add(1, std::memory_order_relaxed) + 1
+        : coarse_hits.load(std::memory_order_relaxed);
+    u64 pending_count = 0;
+    if (pending) {
+        auto& counter = is_write ? pending_writes : pending_reads;
+        pending_count = counter.fetch_add(1, std::memory_order_relaxed) + 1;
+    }
+    const u64 total = notifications.fetch_add(1, std::memory_order_relaxed) + 1;
+    if ((coarse_pending && coarse_count <= 8) || (pending && pending_count <= 8) ||
+        (total & (total - 1)) == 0) {
+        std::printf("Unified access probe: %llu notifications, %llu reads and %llu writes "
+                    "over unfinished GPU write bindings; %llu coarse overlaps; "
+                    "current %s %llu bytes, coarse %u, exact %u; %llu history entries replaced\n",
+                    static_cast<unsigned long long>(total),
+                    static_cast<unsigned long long>(pending_reads.load(std::memory_order_relaxed)),
+                    static_cast<unsigned long long>(pending_writes.load(std::memory_order_relaxed)),
+                    static_cast<unsigned long long>(coarse_count),
+                    is_write ? "write" : "read", static_cast<unsigned long long>(size),
+                    unsigned(coarse_pending), unsigned(pending),
+                    static_cast<unsigned long long>(replaced));
+    }
 }
 
 // bbport (BB_READBACK_LOG): the newest GPU-written bindings, to show which writes a readback that
@@ -692,6 +777,7 @@ BufferCache::~BufferCache() = default;
 
 void BufferCache::InvalidateMemory(VAddr device_addr, u64 size, bool assume_locks) {
     if (UnifiedGuestMemory()) {
+        ProbeUnifiedCpuAccess(scheduler, device_addr, size, true);
         return; // the GPU reads the game's memory itself: nothing to invalidate
     }
     if (LayerMode()) {
@@ -753,6 +839,7 @@ void BufferCache::ExtendWriteFault(VAddr device_addr, u64 guest_rip) {
 
 void BufferCache::ReadMemory(VAddr device_addr, u64 size, bool is_write, bool assume_locks) {
     if (UnifiedGuestMemory()) {
+        ProbeUnifiedCpuAccess(scheduler, device_addr, size, is_write);
         return; // GPU writes land in the game's memory: nothing to read back
     }
     BbStats::readbacks.fetch_add(1, std::memory_order_relaxed);
@@ -3415,6 +3502,27 @@ bool BufferCache::SynchronizeMemoryFromImage(const Buffer* arena, u64 arena_offs
                                                            image.gpu_write_tick)
                                              : -1ll,
                         u32(image.flags));
+        }
+    }
+    // A shared guest-memory pool bounds the allocation, not the individual binding. Check
+    // whether an alias transfer is larger than that binding without logging guest contents.
+    static const bool alias_probe = [] {
+        const char* value = std::getenv("BB_IMAGE_ALIAS_PROBE");
+        return value && std::strcmp(value, "1") == 0;
+    }();
+    if (alias_probe) {
+        static std::atomic<u64> transfers{0}, oversized{0};
+        const u64 total = transfers.fetch_add(1, std::memory_order_relaxed) + 1;
+        const bool larger = image.info.guest_size > size;
+        const u64 over = larger ? oversized.fetch_add(1, std::memory_order_relaxed) + 1
+                               : oversized.load(std::memory_order_relaxed);
+        if ((larger && over <= 8) || (total & (total - 1)) == 0) {
+            std::printf("Image alias probe: %llu transfers, %llu larger than the binding; "
+                        "current binding %u bytes, image %llu bytes, %zu mips\n",
+                        static_cast<unsigned long long>(total),
+                        static_cast<unsigned long long>(over), size,
+                        static_cast<unsigned long long>(image.info.guest_size),
+                        buffer_copies.size());
         }
     }
     auto& tile_manager = texture_cache.GetTileManager();

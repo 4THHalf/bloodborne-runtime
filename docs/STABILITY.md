@@ -689,3 +689,136 @@ The `trophies_smoke` copied-save run completed a 45-second hold without faults, 
 or invalid-mutex panics. Synthetic runtime tests verify event recording and edited-save
 suppression; the game hold did not earn a trophy. Historical assertion counts are unchanged.
 [Protocol, checks and limits](TROPHIES.md).
+
+## Central Yharnam geometry after area transitions (2026-10-13–14)
+
+The maintainer reported large stretched surfaces near the bridge's two werewolves after
+visiting several areas, including transitions through the nearby house and an area with new
+enemies. Restarting restored normal geometry at the same spot. The initial report was after
+10–15 minutes; the isolated reproduction shows that elapsed time alone is not the trigger.
+Standing still is not sufficient reproduction coverage.
+
+The copied-save runs used English, the normal 30 FPS preset, FSR 3.1, a 960×540 startup scene
+patch and 1920×1080 output, live resolution enabled, and `BB_CB_PROBE=1` with a 1,000 us
+probe window. The maintainer played the transitions. No game-memory contents or captures
+are included here; the game-frame dumps remain in ignored test output.
+
+| Run | Draw pipeline | Result |
+|---|---|---|
+| `geom_pipe_on1` | On | Setup attempt stopped early: the direct runner omitted the launcher's startup scene patch. Excluded. |
+| `geom_pipe_on2` | On at startup | Corruption reported at hold sample 424 (roughly seven minutes). Disabling the pipeline live did not repair it; also bypassing the fetch-shader and memory-region caches did not repair it. Ended early after reproduction. |
+| `geom_pipe_off1` | Off from startup | Corruption reported at hold sample 138 (roughly two minutes), immediately after entering an area with new enemies. Ended early after reproduction. |
+
+Both matched setups reproduced stretched geometry in game-frame dumps without a guest fault
+or GPU assertion. The command-buffer probe reported no shared-buffer or overlapping-memory
+uses. The runs followed user-driven routes and the on run included live diagnostic changes;
+they are not an FPS/CPU performance comparison. Pipeline-off is not a workaround. Cache bypass
+not repairing an already corrupted scene does not rule those paths out as earlier causes.
+
+`BB_IMAGE_ALIAS_PROBE=1` adds a bounded count/size diagnostic for image-to-buffer alias
+transfers. `FindImageFromRange` can accept one image whose size differs from the binding, and
+the tiling copy uses the image's size inside a much larger destination allocation. This is
+a candidate to investigate, not an established cause or a changed copy policy. The diagnostic
+is off by default and logs no addresses or game-memory contents. `build.sh --test` passes.
+
+The size diagnostic did not identify an oversized transfer. `geom_alias_on1` reported missing
+geometry, but no confirmed vertex explosion before the window was closed; it is not a clean
+15-minute acceptance run. In `geom_alias_off1`, with the pipeline off from startup, the
+maintainer reported stretched scenery at hold sample 548. The latest counter at onset was
+32,768 transfers, zero larger than the binding; the diagnostic also logs the first eight
+oversized transfers immediately, and none were reported. The captured interior view did not
+clearly show the affected scenery, so the visual classification relies on the maintainer's
+confirmation. This does not exclude stale equal-sized aliases or incorrect resource lifetimes.
+The owned run was stopped early after the report, not counted as a completed benchmark.
+
+`geom_gpu_lock1` tests `BB_SUBMIT_LOCK=gpu` with the pipeline still off and the same size
+probe and scene settings. It waits for GPU completion instead of releasing the submission
+lock at decode. The maintainer reported recurrence around hold sample 259, more commonly when entering or
+leaving dark places. A game-frame dump confirms a stretched triangle. The latest size-probe
+count was 16,384 transfers with zero oversized copies; there was no new fault or GPU assertion.
+The run was stopped early after reproduction. GPU-completion locking is not a workaround.
+Dark-place transitions are a reproduction clue, not proof of a lighting-shader defect.
+
+`geom_hoist_off1` next disables buffer-copy hoisting (`BB_HOIST_COPIES=0`), retaining the
+pipeline-off and GPU-completion-lock settings. The off run also reproduced at hold sample 259, after
+entering a place with more enemies. A game-frame dump confirms stretched scenery. The latest
+size counter was 16,384 transfers, zero oversized; no fault or GPU assertion was reported.
+The run was stopped early. Disabling copy hoisting is not a workaround.
+
+`geom_texture_safe1` next disables the image-description cache, lock-free upload check,
+image lookup cache, deferred uploads, texture-binding memo, image-update fast path, view memo,
+texture-binding helper and texture-set memo from startup (disabled mask 35,211,215,635,936).
+Other settings match `geom_hoist_off1`. This is a diagnostic group, not a proposed fix;
+a positive result must be repeated against control and the group narrowed. Result pending.
+No default or copy policy has changed.
+
+### bbport vertex-explosion fixes reviewed (2026-10-14)
+
+Upstream was fetched and remains at 0.51 (`3c57da4`). Commit
+[`2ae28fe`](https://github.com/deadinside28/bloodborne_pc/commit/2ae28fe1158cabfd2695dcc30b7bcb014c68c52b)
+changed the default readback mode from Disabled to Relaxed: its explanation is stale
+GPU-written vertex data read by FaceGen. This commit is already an ancestor of runtime main,
+and `gpu/shim/core/emulator_settings.h` still defaults to Relaxed. The controlled geometry
+runs did not pass a readback override. Reapplying this setting is not a new fix.
+
+A later direct-recording copy-order repair is also present: `SmallGuestCopy` executes a copy
+immediately when recording is not deferred, before commands consuming it. Upstream
+[issue 39](https://github.com/deadinside28/bloodborne_pc/issues/39) associated this problem with
+`BB_VK_RECORD_THREAD=0`; the geometry runs have not selected that mode. The layer's later
+stale-mirror/writeback repairs are present too, but that sparse/mirror memory path is not used
+by the imported guest pool on this Mac.
+
+The readback fix's synchronization requirement is relevant even with shared memory. Our
+unified path records GPU-write completion ticks and uses them to avoid copying unfinished
+GPU-written inputs into the constant stream. However, `BufferCache::ReadMemory` and
+`InvalidateMemory` return early in unified mode, and unified written bindings do not take the
+old memory tracker's GPU-modified marking path. Sharing bytes removes the need to copy them
+back; it does not establish that the GPU finished before a guest CPU read or reuse. This is a
+concrete difference to investigate, not a demonstrated cause of the stretched scenery.
+Submission-level GPU locking already failed to prevent the symptom, so a fix cannot be
+accepted solely on a stronger global wait. Audit per-range CPU/GPU access and completion
+ordering, including alias writes, before adding a workaround. No renderer code was changed
+by this review and no upstream fix is claimed newly applied.
+
+### Unified CPU-access audit and diagnostic (2026-10-14)
+
+Unified written buffer bindings note `WriteTicks`, but return before
+`MemoryTracker::ForEachUploadRange` marks GPU-modified pages. The old tracker invokes
+readback on a CPU invalidation of such a page, and Precise mode additionally protects reads.
+The unified `ReadMemory` and `InvalidateMemory` paths return without either copying or waiting.
+The existing tick check in `IsRegionGpuModified` affects renderer bindings; it does not itself
+intercept guest CPU loads. The libc write preparation hook is conditional on existing trap
+reasons, and its post-write notification is conditional on the write-watch bitmap. Simply
+adding a wait to `ReadMemory` therefore cannot cover all ordinary CPU reads or writes.
+
+`BB_UNIFIED_ACCESS_PROBE=1` counts read/write notifications that reach those unified early
+returns while the range's newest recorded GPU write has not completed. It refreshes the
+Vulkan timeline completion value before reporting pending work. Logs contain counts and
+sizes only, no guest addresses or contents. Notifications may arrive before or after a host
+write; overlaps are evidence of pending work, not proof of simultaneous stores. Direct guest
+loads/stores without a notification, physical aliases with different virtual addresses, GPU
+writes not included in the tick table and GPU reads are outside this diagnostic's coverage.
+`build.sh --test` passed, with the existing platform skips.
+
+`geom_unified_probe1` used: copied-save area transitions, pipeline off, ordinary
+copy-hoisting/cache/submission-lock settings, with both aggregate probes enabled. No waiting
+policy or default has changed. The preceding texture-shortcut run ended with a requested
+window close; without a visual report, it is not clean-route acceptance.
+
+The maintainer reported recurrence in `geom_unified_probe1`. It had completed its 900-sample
+hold before the report arrived: 29.7 FPS, p90 33.3 ms, sampled CPU 426%, no new assertion or
+command-buffer overlap. The onset time is unknown. At least three write notifications
+coincided with unfinished writes in the coarse tick table; the logged access size was 8 bytes.
+No read notifications were counted. These notifications can overlap a 64 KiB tracking
+region without overlapping the GPU's declared binding, so they do not demonstrate a race.
+The latest image-size count was 65,536 transfers, zero oversized. The attempted post-exit
+capture is excluded: `grab.sh` could previously convert an older raw dump after its trigger
+wait timed out. It now requires a new dump; the mislabeled image was removed.
+
+The probe now separately checks a bounded, mutex-protected history of the latest 4,096 GPU
+write bindings for exact byte-range overlap, and reports replaced-history entries. It refreshes
+completion before counting a pending write. Exact overlap here means overlap with a declared
+binding, not proof that the shader wrote every byte. A negative result can miss older history,
+unnotified CPU accesses and different virtual aliases. `build.sh --test` passes.
+`geom_unified_exact1` repeats the same settings with a 1,800-sample limit and the refined probe;
+its result is pending. No synchronization workaround or default change has been applied.
