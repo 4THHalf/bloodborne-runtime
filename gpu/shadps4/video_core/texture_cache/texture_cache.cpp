@@ -271,8 +271,9 @@ void TextureCache::DownloadImageMemory(ImageId image_id, bool sync) {
 void TextureCache::MarkAsMaybeDirty(ImageId image_id, Image& image) {
     if (image.hash == 0) {
         // Initialize hash
-        const u8* addr = std::bit_cast<u8*>(image.info.guest_address);
-        image.hash = XXH3_64bits(addr, image.info.guest_size);
+        // A fault handler can hold the texture-cache lock here. Precise readbacks must
+        // inspect the backing view, rather than fault recursively on protected guest pages.
+        image.hash = HashUploadGuestMemory(image.info.guest_address, image.info.guest_size, true);
     }
     image.flags |= ImageFlagBits::MaybeCpuDirty;
     UntrackImage(image_id);
@@ -977,8 +978,7 @@ void TextureCache::RefreshImage(Image& image) {
         // bbport (from bmy/bbport-mac): the whole image, as MarkAsMaybeDirty hashes it. Its first
         // 64 pixels alone missed writes elsewhere in it: the item picture on the loading screen
         // (its corner stays transparent) stayed empty until loading ended.
-        const auto addr = std::bit_cast<u8*>(image.info.guest_address);
-        const u64 hash = XXH3_64bits(addr, image.info.guest_size);
+        const u64 hash = HashUploadGuestMemory(image.info.guest_address, image.info.guest_size, true);
         if (image.hash == hash) {
             image.flags &= ~ImageFlagBits::MaybeCpuDirty;
             return;

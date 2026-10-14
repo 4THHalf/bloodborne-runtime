@@ -822,3 +822,64 @@ binding, not proof that the shader wrote every byte. A negative result can miss 
 unnotified CPU accesses and different virtual aliases. `build.sh --test` passes.
 `geom_unified_exact1` repeats the same settings with a 1,800-sample limit and the refined probe;
 its result is pending. No synchronization workaround or default change has been applied.
+
+The refined control `geom_unified_exact1` reproduced around hold sample 431 after the
+maintainer broke scenery during prolonged play. A fresh game-frame dump confirms severe
+stretched geometry. At the report the probe had logged seven coarse pending overlaps, all
+with zero exact overlap in retained declared binding history; no CPU reads over unfinished
+bindings were reported. The history had replaced over 2.8 million entries, so it cannot
+exclude older or unnotified accesses. The latest size count was 16,384 transfers, zero
+oversized. No new assertion or command-buffer overlap appeared. The owned run was stopped
+early after reproduction. Breaking scenery joins area transitions as a useful trigger.
+
+### Opt-in unified CPU synchronization experiment (2026-10-14)
+
+`BB_UNIFIED_CPU_SYNC=1` requires `BB_READBACKS=2` and reuses the old memory tracker's
+CPU/GPU page-state transitions for unified written buffer bindings. No upload is needed:
+the GPU already writes the imported pool. A trapped CPU read/write waits for the newest
+write tick, submitting an open chunk when needed, then drops the GPU-modified protection.
+Guest-thread waits are sent through the GPU command thread, following the existing readback
+path; a CPU write additionally marks the page CPU-modified. The switch is off by default.
+
+The experiment also records/tracks image-to-buffer tiling writebacks. Previously, that
+unified write did not enter `WriteTicks` (the old follow-up `NoteGpuWrite` only applied to
+sparse guest-in-place memory). The diagnostic-only path now includes those writebacks in
+its exact binding history without changing the ordinary tick table. This changes diagnostic
+coverage; it is not retrospective evidence about the seven coarse overlaps above.
+
+`build.sh --test` passes. `geom_unified_sync1` is pending, matching the pipeline-off control
+with the two aggregate probes, plus the synchronization switch and Precise mode. This is a
+conservative correctness experiment and may add substantial page-fault/wait cost. It is not
+a proposed default or an accepted fix. Page-level tracking, virtual-address aliases, shader
+writes outside declared bindings and untracked GPU read lifetimes remain limits to audit.
+Normal relaxed/default behavior remains unchanged.
+
+`geom_unified_sync1` stalled while loading, before the hold. A two-second host sample showed
+preparation workers in `PageManager` → `BufferCache::ReadMemory`, awaiting GPU-thread commands
+while holding the pipeline-cache lock. The GPU command thread awaited that cache lock in
+pipeline refresh. This is a dependency cycle introduced by the conservative protection
+experiment, not a successful geometry test. The probe had observed pending exact read binding
+overlaps, but preparation-worker accesses are renderer reads, not evidence of guest FaceGen
+reads. The owned run was stopped; no default changed.
+
+`geom_unified_sync2` retries the same experiment with `BB_PREP_WORKERS=0` to remove those
+speculative lock holders. Result pending. Any positive route result needs a matching
+workers-off control and repeated alternation before attributing improvement to synchronization.
+Do not enable the experiment with preparation workers until their read/fault contract is fixed.
+
+`geom_unified_sync2` reached the level but stalled while teleporting to Hunter's Dream,
+reported around hold sample 346. The process remained alive; no fault or GPU assertion was
+logged. A two-second host sample showed the GPU command thread waiting on the texture-cache
+mutex, while the game thread was inside `TextureCache::InvalidateMemory` → XXH3 hashing in
+a fault handler. Two texture hash paths still read the protected guest view directly. The
+sample identifies a cache-lock/protected-read hazard, not a completed geometry check. The
+owned run was stopped. Do not classify this as a process crash or add it to assertion counts.
+
+`MarkAsMaybeDirty` and the MaybeCpuDirty refresh hash now use the existing upload hash helper,
+which reads the backing view in Precise mode. Ordinary Relaxed hashing remains a direct read.
+The synchronization experiment now refuses to enable unless `BB_READBACKS=2`,
+`BB_PREP_WORKERS=0` and `BB_DRAW_PIPE=0` are explicit. `build.sh --test` passes.
+`geom_unified_sync3` retries the same settings with the hash-path repair; first repeat the
+teleport before long-route acceptance. Result pending. These repairs do not establish that
+shared-buffer synchronization fixes vertex explosion. A workers-off, Precise-mode control
+with only `BB_UNIFIED_CPU_SYNC=0` is required if the candidate survives the route.

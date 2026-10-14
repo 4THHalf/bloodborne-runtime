@@ -78,6 +78,30 @@ bool UnifiedAccessProbeEnabled() {
     return enabled;
 }
 
+bool UnifiedCpuSyncEnabled() {
+    static const bool enabled = [] {
+        const char* value = std::getenv("BB_UNIFIED_CPU_SYNC");
+        if (!value || std::strcmp(value, "1") != 0) {
+            return false;
+        }
+        if (EmulatorSettings.GetReadbacksMode() != GpuReadbacksMode::Precise) {
+            std::printf("Unified CPU sync: disabled; BB_READBACKS=2 is required\n");
+            return false;
+        }
+        const char* workers = std::getenv("BB_PREP_WORKERS");
+        const char* pipe = std::getenv("BB_DRAW_PIPE");
+        if (!workers || std::strcmp(workers, "0") != 0 ||
+            !pipe || std::strcmp(pipe, "0") != 0) {
+            std::printf("Unified CPU sync: disabled; the experiment requires "
+                        "BB_PREP_WORKERS=0 and BB_DRAW_PIPE=0\n");
+            return false;
+        }
+        std::printf("Unified CPU sync: precise page tracking and completion waits enabled\n");
+        return true;
+    }();
+    return enabled;
+}
+
 // Diagnostic history of declared write bindings, not their contents. The bounded history
 // can miss older bindings; a negative lookup is not proof that the range was never written.
 struct UnifiedWriteProbeHistory {
@@ -778,6 +802,11 @@ BufferCache::~BufferCache() = default;
 void BufferCache::InvalidateMemory(VAddr device_addr, u64 size, bool assume_locks) {
     if (UnifiedGuestMemory()) {
         ProbeUnifiedCpuAccess(scheduler, device_addr, size, true);
+        if (UnifiedCpuSyncEnabled()) {
+            memory_tracker->InvalidateRegion(device_addr, size, [this, device_addr, size, assume_locks] {
+                ReadMemory(device_addr, size, true, assume_locks);
+            });
+        }
         return; // the GPU reads the game's memory itself: nothing to invalidate
     }
     if (LayerMode()) {
@@ -840,6 +869,25 @@ void BufferCache::ExtendWriteFault(VAddr device_addr, u64 guest_rip) {
 void BufferCache::ReadMemory(VAddr device_addr, u64 size, bool is_write, bool assume_locks) {
     if (UnifiedGuestMemory()) {
         ProbeUnifiedCpuAccess(scheduler, device_addr, size, is_write);
+        if (UnifiedCpuSyncEnabled()) {
+            const auto synchronize = [this, device_addr, size, is_write] {
+                // Shared bytes need no download, but the CPU must not use them before the
+                // GPU write completes. Wait submits a still-open chunk before waiting for it.
+                const u64 tick = WriteTicks().Newest(device_addr, size);
+                if (tick) {
+                    scheduler.Wait(tick);
+                }
+                memory_tracker->UnmarkRegionAsGpuModified(device_addr, size);
+                if (is_write) {
+                    memory_tracker->MarkRegionAsCpuModified(device_addr, size);
+                }
+            };
+            if (assume_locks) {
+                synchronize();
+            } else {
+                liverpool->SendCommand<true>(synchronize);
+            }
+        }
         return; // GPU writes land in the game's memory: nothing to read back
     }
     BbStats::readbacks.fetch_add(1, std::memory_order_relaxed);
@@ -1226,7 +1274,7 @@ std::pair<const Buffer*, u64> BufferCache::ObtainBuffer(VAddr device_addr, u32 s
         if (is_written || size > STREAM_THRESHOLD || IsRegionGpuModified(device_addr, size)) {
             if (const auto range = UnifiedRange(device_addr, size)) {
                 if (is_written) {
-                    WriteTicks().Note(device_addr, size, scheduler.CurrentTick());
+                    NoteWriteTick(device_addr, size);
                 } else if (is_texel_buffer) {
                     SynchronizeMemoryFromImage(range->first, range->second, device_addr, size);
                 }
@@ -3527,6 +3575,13 @@ bool BufferCache::SynchronizeMemoryFromImage(const Buffer* arena, u64 arena_offs
     }
     auto& tile_manager = texture_cache.GetTileManager();
     tile_manager.TileImage(image, buffer_copies, arena, arena_offset);
+    if (UnifiedGuestMemory()) {
+        if (UnifiedCpuSyncEnabled()) {
+            NoteWriteTick(device_addr, image.info.guest_size);
+        } else if (UnifiedAccessProbeEnabled()) {
+            UnifiedWriteHistory().Note(device_addr, image.info.guest_size, scheduler.CurrentTick());
+        }
+    }
     DropShadows(device_addr, size);
     // A GPU write like any other: what the GPU copies there each frame (a render target read as a
     // texel buffer) goes to VRAM instead of crossing PCIe twice (written there, read back).
@@ -3850,6 +3905,11 @@ void BufferCache::ReportArenaBinds() {
 namespace VideoCore {
 void BufferCache::NoteWriteTick(VAddr address, u64 size) {
     WriteTicks().Note(address, size, scheduler.CurrentTick());
+    if (UnifiedGuestMemory() && UnifiedCpuSyncEnabled() && size) {
+        // The GPU already writes the imported pool. Reuse page-state transitions without
+        // uploading CPU bytes: protect reads/writes until the binding's work completes.
+        memory_tracker->ForEachUploadRange(address, size, true, [](u64, u64) {}, [] {});
+    }
 }
 } // namespace VideoCore
 

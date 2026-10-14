@@ -292,3 +292,26 @@ these may be neighboring bytes within the 64 KiB tick granule, not an exact over
 notifications were counted. The refined probe compares the last 4,096 declared write bindings;
 `geom_unified_exact1` is pending. No synchronization fix is claimed. `grab.sh` now rejects a
 trigger timeout instead of relabeling an older raw dump; the post-exit capture was excluded.
+
+`geom_unified_exact1` reproduced around hold sample 431 after breaking scenery, confirmed
+by a fresh game-frame dump. Seven coarse overlaps had zero exact overlap in recent binding
+history; no root cause was established. `BB_UNIFIED_CPU_SYNC=1` with `BB_READBACKS=2` is an
+opt-in experiment restoring shared-buffer page tracking and CPU completion waits, including
+image-to-buffer tiling writes previously missing from unified ticks. Normal tests pass;
+`geom_unified_sync1` is pending. Do not make this default without route acceptance, repeat
+controls and performance gates. Default behavior remains unchanged; N4 stays paused.
+
+`geom_unified_sync1` stalled loading: preparation-worker protected reads queued synchronous
+GPU-thread callbacks while holding pipeline-cache locks; the GPU thread awaited those locks.
+This diagnostic dependency cycle is confirmed by a host sample. No default changed.
+`geom_unified_sync2` retries with `BB_PREP_WORKERS=0`; require a matching workers-off control
+before interpreting a positive result. Pending read overlaps in the stalled sample were
+renderer preparation accesses, not demonstrated guest FaceGen reads.
+
+`geom_unified_sync2` hung on teleport to Hunter's Dream around hold sample 346 (alive, no
+new assertion). A host sample showed the GPU thread waiting for the texture-cache mutex and
+the game thread hashing guest memory in texture invalidation's fault handler. The two raw
+texture hashes now use the Precise-mode backing-view helper. The experimental switch refuses
+to enable without explicit Precise mode, zero preparation workers and pipeline off. Normal
+tests pass; `geom_unified_sync3` first retries teleport. No geometry fix is accepted and no
+historical crash/assertion count was incremented for these diagnostic hangs.
