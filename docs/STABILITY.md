@@ -950,3 +950,35 @@ experiment is accepted. Return to draw/resource-specific diagnostics, including 
 reuse and buffer access ordering. The existing frame analyzer groups passes and retains
 limited buffer samples; it does not yet identify an individual corrupt draw or its complete
 resource lifetime history. Its game-derived outputs belong only in ignored local test output.
+
+### Per-command geometry capture (2026-10-14)
+
+The next diagnostic slice adds `BB_CAPTURE_DRAWS=1` to the existing trigger-driven frame
+analyzer. It records direct and indirect draw/dispatch commands with shader identities,
+vertex/index/ordinary shader-buffer bindings, guest ranges, resolved buffer device bases and
+offsets, access direction, recording ticks and cached GPU completion ticks. Indirect argument
+and count bindings are recorded; indirect draw counts and dispatch dimensions are unknown
+and reported as zero. Cached completion is a lower bound, not proof of a pending hazard.
+Detailed mode omits the old CPU samples of guest buffer contents. Command records are capped
+at 65,536 per capture and bindings at 128 per command, with explicit truncation markers.
+
+Use an ignored local directory for `BB_CAPTURE_DIR` and a trigger file named by
+`BB_CAPTURE_TRIGGER`. Captures contain game-derived metadata and must never enter Git or a
+wiki. This is binding identification, not a resource-lifetime trace: allocation generations,
+physical aliases, previous writes and GPU-read retirement remain to instrument. Generated
+quad/rect geometry and special shader-buffer types do not yet have full binding coverage.
+The existing capture mode bypasses renderer memoization while active, so capture frames are
+not performance measurements. No copy, synchronization or default policy changed.
+
+`bash build.sh --test` passes with the existing platform skips. The copied-save
+`geom_drawtrace1` run reached the level with the draw pipeline off, six preparation workers,
+Relaxed readbacks, normal FaceGen and unified CPU synchronization off. Its first capture
+contains 976 command records, 4,410 vertex bindings, 833 index bindings and 7,858 shader-buffer
+bindings, with no truncation. This validates diagnostic output, not visual correctness.
+The multi-area route result and a capture at symptom onset are pending.
+
+The next comparison uses the published 0.6.0 package in a read-only mount, with its own
+bundled runtime and MoltenVK, through the copied-save runner. Earlier release smoke tests did
+not exercise this route; regression status is unknown. If both builds reproduce, localize an
+affected draw and trace its backing reuse and producers before trying a targeted retained
+copy. If only current reproduces repeatedly, bisect runtime changes using the active route.

@@ -344,3 +344,9 @@ accepted workaround. No new fault/assertion/CB overlap; zero oversized writes at
 16,384 transfers and zero exact pending overlaps in retained binding history. The first on
 trial remains excluded for early quit. Next diagnostics should identify draws/resources and
 reuse ordering; the existing pass-group frame analyzer is not a complete lifetime trace.
+
+`BB_CAPTURE_DRAWS=1` now adds bounded per-command binding metadata to the triggered frame
+analyzer without guest-content samples. `geom_drawtrace1` loaded and produced 976 command
+records without truncation; route acceptance is pending. This does not yet track allocation
+generations or complete resource lifetimes. Keep all captures in ignored out/. Compare the
+published 0.6.0 package on the same active route before claiming a recent regression.

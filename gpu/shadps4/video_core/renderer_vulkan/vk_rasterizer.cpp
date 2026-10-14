@@ -1715,6 +1715,10 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
                             bool is_indexed, u32 index_offset) {
     BB_SECTION(DrawRecord);
     buffer_cache.NewPacket();
+    if (FrameCapture::Active()) {
+        FrameCapture::BeginCommand("draw", scheduler.CurrentTick(),
+                                   scheduler.GetWorkSemaphore()->KnownGpuTick());
+    }
     if (DrawPipe::OnStageB()) {
         FrameCapture::Poll();
         scheduler.PopPendingOperations();
@@ -2069,6 +2073,10 @@ void Rasterizer::DrawIndirect(bool is_indexed, VAddr arg_address, u32 offset, u3
 void Rasterizer::DrawIndirectRecord(const GraphicsPipeline* pipeline, bool is_indexed,
                                     const IndirectDraw& indirect) {
     buffer_cache.NewPacket();
+    if (FrameCapture::Active()) {
+        FrameCapture::BeginCommand("draw_indirect", scheduler.CurrentTick(),
+                                   scheduler.GetWorkSemaphore()->KnownGpuTick());
+    }
     if (DrawPipe::OnStageB()) {
         FrameCapture::Poll();
         scheduler.PopPendingOperations();
@@ -2161,6 +2169,16 @@ void Rasterizer::DrawIndirectRecord(const GraphicsPipeline* pipeline, bool is_in
             cmdbuf.drawIndirect(args, args_offset, max_count, stride);
         }
     });
+    if (FrameCapture::Active()) {
+        FrameCapture::Binding("indirect_args", 0, stride, indirect.args, u64(stride) * max_count,
+                              buffer->BufferDeviceAddress(), base, false);
+        if (count_address) {
+            FrameCapture::Binding("indirect_count", 0, 0, count_address, 4,
+                                  count_buffer->BufferDeviceAddress(), count_offset, false);
+        }
+        FrameCapture::Draw(vs_crumb ? vs_crumb->pgm_hash : 0,
+                           ps_crumb ? ps_crumb->pgm_hash : 0, 0, 0);
+    }
     DebugState.IncDrawCall();
 
     ResetBindings(false);
@@ -2189,6 +2207,10 @@ void Rasterizer::DispatchDirect() {
 void Rasterizer::DispatchRecord(const ComputePipeline* pipeline) {
     BB_SECTION(DispatchRecord);
     buffer_cache.NewPacket();
+    if (FrameCapture::Active()) {
+        FrameCapture::BeginCommand("dispatch", scheduler.CurrentTick(),
+                                   scheduler.GetWorkSemaphore()->KnownGpuTick());
+    }
     FrameCapture::Poll();
     gbuffer_draw = false;
 
@@ -2281,6 +2303,10 @@ void Rasterizer::DispatchIndirect(VAddr address, u32 offset, u32 size) {
 void Rasterizer::DispatchIndirectRecord(const ComputePipeline* pipeline, VAddr address,
                                         u32 size) {
     buffer_cache.NewPacket();
+    if (FrameCapture::Active()) {
+        FrameCapture::BeginCommand("dispatch_indirect", scheduler.CurrentTick(),
+                                   scheduler.GetWorkSemaphore()->KnownGpuTick());
+    }
     scheduler.PopPendingOperations();
     const u32 offset = 0;
 
@@ -2327,6 +2353,11 @@ void Rasterizer::DispatchIndirectRecord(const ComputePipeline* pipeline, VAddr a
         cmdbuf.bindPipeline(vk::PipelineBindPoint::eCompute, handle);
         cmdbuf.dispatchIndirect(args, args_offset);
     });
+    if (FrameCapture::Active()) {
+        FrameCapture::Binding("indirect_args", cs_crumb.pgm_hash, 0, address, size,
+                              buffer->BufferDeviceAddress(), base, false);
+        FrameCapture::Dispatch(cs_crumb.pgm_hash, 0, 0, 0);
+    }
     DebugState.IncDispatch();
 
     ResetBindings(true);
@@ -2863,7 +2894,7 @@ void Rasterizer::ResolveVertexBuffers(const GraphicsPipeline* pipeline,
                                               guest_buffers.size() * sizeof(AmdGpu::Buffer));
     }
     // Object motion research: vertex streams of G-buffer draws.
-    if (FrameCapture::Active() && gbuffer_draw) {
+    if (FrameCapture::Active() && !FrameCapture::Detailed() && gbuffer_draw) {
         for (const auto& vb : guest_buffers) {
             char note[128];
             std::snprintf(note, sizeof(note), "\n  gb vb at %#llx size %u stride %u",
@@ -2938,6 +2969,13 @@ void Rasterizer::ResolveVertexBuffers(const GraphicsPipeline* pipeline,
                                    buffer.base_address < range.end_address;
                         });
             ASSERT(host_buffer_info != ranges_merged.cend());
+            if (FrameCapture::Active() && FrameCapture::Detailed()) {
+                FrameCapture::Binding("vertex", pipeline->GetStage(Shader::SwStage::Vertex).pgm_hash,
+                    u32(host_buffers.size()), buffer.base_address, buffer.GetSize(),
+                    host_buffer_info->buffer->BufferDeviceAddress(),
+                    host_buffer_info->offset + buffer.base_address - host_buffer_info->base_address,
+                    false);
+            }
             host_buffers.emplace_back(host_buffer_info->buffer->Handle());
             host_offsets.push_back(host_buffer_info->offset + buffer.base_address -
                                    host_buffer_info->base_address);
@@ -3324,6 +3362,10 @@ void Rasterizer::ResolveIndexBuffer(u32 index_offset) {
     // ResetBindings tracks graphics reads after the draw. Without this, an upload into a
     // mirrored index range could overtake the previous draw's fixed-function index fetches.
     bound_buffers.emplace_back(buffer, offset, index_buffer_size, false);
+    if (FrameCapture::Active() && FrameCapture::Detailed()) {
+        FrameCapture::Binding("index", 0, index_size, index_address, index_buffer_size,
+                              buffer->BufferDeviceAddress(), offset, false);
+    }
     index_bind = {buffer->Handle(), offset, index_type};
 }
 
@@ -3659,7 +3701,8 @@ void Rasterizer::BindBuffers(const Shader::Info& stage, const PreparedStage* pre
                 camera_motion->OnConstants(reinterpret_cast<const float*>(vsharp.base_address));
             }
             // Object motion research: the vertex shader buffers of G-buffer draws.
-            if (FrameCapture::Active() && gbuffer_draw && stage.sw_stage == Shader::SwStage::Vertex &&
+            if (FrameCapture::Active() && !FrameCapture::Detailed() && gbuffer_draw &&
+                stage.sw_stage == Shader::SwStage::Vertex &&
                 vsharp.base_address != 0 && memory->IsValidGpuMapping(vsharp.base_address, 0)) {
                 const auto* f = reinterpret_cast<const float*>(vsharp.base_address);
                 char note[192];
@@ -3670,7 +3713,8 @@ void Rasterizer::BindBuffers(const Shader::Info& stage, const PreparedStage* pre
                               u32(vsharp.GetStride()), f[0], f[1], f[2], f[3]);
                 FrameCapture::Note(note);
             }
-            if (FrameCapture::Active() && vsharp.base_address != 0 && vsharp.GetSize() != 0 &&
+            if (FrameCapture::Active() && !FrameCapture::Detailed() &&
+                vsharp.base_address != 0 && vsharp.GetSize() != 0 &&
                 memory->IsValidGpuMapping(vsharp.base_address, 0)) {
                 FrameCapture::Buffer(stage.pgm_hash, binding.buffer, vsharp.base_address,
                                      reinterpret_cast<const void*>(vsharp.base_address),
@@ -3727,6 +3771,11 @@ void Rasterizer::BindBuffers(const Shader::Info& stage, const PreparedStage* pre
                 const auto [buffer, offset] = buffer_cache.ObtainBuffer(
                     vsharp.base_address, size, desc.is_written, desc.is_formatted);
                 TraceShaderBinding(stage, vsharp.base_address, size, desc.is_written, buffer_cache);
+                if (FrameCapture::Active() && FrameCapture::Detailed()) {
+                    FrameCapture::Binding("shader", stage.pgm_hash, binding.buffer,
+                        vsharp.base_address, size, buffer->BufferDeviceAddress(), offset,
+                        desc.is_written);
+                }
                 const u64 offset_aligned = Common::AlignDown(offset, alignment);
                 const u64 adjust = offset - offset_aligned;
                 if (adjust % 4 != 0) {
