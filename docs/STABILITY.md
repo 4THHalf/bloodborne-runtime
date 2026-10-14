@@ -883,3 +883,33 @@ The synchronization experiment now refuses to enable unless `BB_READBACKS=2`,
 teleport before long-route acceptance. Result pending. These repairs do not establish that
 shared-buffer synchronization fixes vertex explosion. A workers-off, Precise-mode control
 with only `BB_UNIFIED_CPU_SYNC=0` is required if the candidate survives the route.
+
+### FaceGen isolation comparison (2026-10-14)
+
+The maintainer proposed disabling FaceGen to narrow the failure. The public `Disable Facegen`
+patch for 1.09, credited to Kyo in
+[shadps4-emu/ps4_cheats](https://github.com/shadps4-emu/ps4_cheats/blob/e34463942099072e5d8f5e2bcb3d7d927683b349/PATCHES/Bloodborne.xml),
+was prepared as a temporary external patch under ignored test output. Its two writes match
+that pinned revision. No patch bytes, game assets or game code were added to a repository;
+no game files or real saves were modified. The external patch selector allows matching
+normal/disabled runs without changing the built-in patch collection.
+
+`geom_facegen_control1` uses the copied save, pipeline off, six preparation workers, Relaxed
+readbacks and the synchronization experiment explicitly off. Scene/output and aggregate
+probe settings match the preceding control. The startup log confirms the ordinary 71 patch
+writes and no FaceGen-disable patch. The maintainer plays area transitions and breaks scenery.
+The control reproduced at hold sample 385 (roughly six minutes), confirmed by a fresh
+game-frame dump. No new fault, GPU assertion or command-buffer overlap was reported. The
+latest alias size count was 16,384 transfers, zero oversized; the refined access probe logged
+eight coarse overlaps and zero exact pending binding overlaps in its retained history.
+The owned control was stopped early after reproduction. `geom_facegen_disabled1` is pending,
+with the same settings and only the external FaceGen-disable patch selection changed.
+Its startup log confirms the external patch's two writes, 73 total writes, and 272 bytes
+applied versus the control's 71 writes and 265 bytes. This verifies patch application,
+not the result of the route comparison. Corruption with FaceGen
+disabled would show FaceGen is not necessary to trigger this failure; a clean trial needs
+repeated alternating controls because the patch changes workload and timing too.
+
+The preceding repaired synchronization trial `geom_unified_sync3` reached the level and
+ended with a requested window close. No visual/teleport acceptance report was obtained; do not
+claim that its hash-path repair passed teleport or prevented geometry corruption.

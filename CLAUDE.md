@@ -315,3 +315,17 @@ texture hashes now use the Precise-mode backing-view helper. The experimental sw
 to enable without explicit Precise mode, zero preparation workers and pipeline off. Normal
 tests pass; `geom_unified_sync3` first retries teleport. No geometry fix is accepted and no
 historical crash/assertion count was incremented for these diagnostic hangs.
+
+FaceGen diagnostic comparison: a temporary external Kyo Disable Facegen patch from
+shadps4-emu/ps4_cheats e344639 is kept only in ignored test output. `geom_facegen_control1`
+is pending, with the synchronization experiment off and normal 71 startup patch writes.
+Compare against disabled using the same copied save/route; one clean disabled trial cannot
+exclude timing effects. No game files or real saves changed. `geom_unified_sync3` ended by
+window close without teleport/visual acceptance, so the experimental hash repair remains
+unaccepted as a geometry workaround. No new assertion counts were inferred.
+
+`geom_facegen_control1` reproduced at hold sample 385, confirmed by a fresh game-frame dump,
+without a new assertion or command-buffer overlap. `geom_facegen_disabled1` is pending; only
+Kyo's temporary external Disable Facegen patch differs. Keep synchronization off, Relaxed
+readbacks, six preparation workers and pipeline off in both. Do not call the patch a fix
+without repeated controls, and do not add its bytes or game-derived diagnostics to Git.
