@@ -350,3 +350,7 @@ analyzer without guest-content samples. `geom_drawtrace1` loaded and produced 97
 records without truncation; route acceptance is pending. This does not yet track allocation
 generations or complete resource lifetimes. Keep all captures in ignored out/. Compare the
 published 0.6.0 package on the same active route before claiming a recent regression.
+
+`geom_drawtrace1` subsequently reproduced per the maintainer, who closed the game at onset
+(last live hold sample 474). Only the earlier capture exists; no affected-frame capture was
+obtained and no new fault/assertion appeared. Binding/lifetime localization remains open.

@@ -982,3 +982,10 @@ bundled runtime and MoltenVK, through the copied-save runner. Earlier release sm
 not exercise this route; regression status is unknown. If both builds reproduce, localize an
 affected draw and trace its backing reuse and producers before trying a targeted retained
 copy. If only current reproduces repeatedly, bisect runtime changes using the active route.
+
+`geom_drawtrace1` reproduced per the maintainer, who closed the window immediately after
+onset. The last live hold sample was 474; this is an endpoint, not an exact onset timestamp.
+The log contains one earlier 106-pass capture and no capture at the reported onset. Do not
+classify the earlier capture as corrupted or independently visually clean. No logged fault,
+GPU assertion or unknown SurfaceFormat appeared. The run is a reported reproduction, not a
+completed performance hold. A future onset capture must be triggered before the game closes.
