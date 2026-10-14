@@ -336,3 +336,11 @@ but the trial is too short for acceptance and quit origin is unknown. The runner
 owned-launcher early exit status immediately and targets only owned processes on shutdown.
 A mock status-7 check passed. `geom_facegen_disabled2` repeats the incomplete on trial with
 the same copied save/settings; result pending. No FaceGen workaround/default is accepted.
+
+FaceGen-disabled repeat `geom_facegen_disabled2` also reproduced per the maintainer at hold
+sample 301, with both public patch writes verified applied. The interior dump is less clear
+than the control's stretched surfaces; do not claim equal severity. The patch is not an
+accepted workaround. No new fault/assertion/CB overlap; zero oversized writes at the latest
+16,384 transfers and zero exact pending overlaps in retained binding history. The first on
+trial remains excluded for early quit. Next diagnostics should identify draws/resources and
+reuse ordering; the existing pass-group frame analyzer is not a complete lifetime trace.

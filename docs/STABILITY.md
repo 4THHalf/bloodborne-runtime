@@ -931,3 +931,22 @@ performance summary; no game was launched by that check. Shell syntax checks pas
 `geom_facegen_disabled2` repeats the same disabled settings after the incomplete trial;
 this is not a second accepted on result. The original copied save is restored for the retry,
 and its route result is pending. The public patch remains only in ignored test output.
+
+`geom_facegen_disabled2` reproduced the maintainer's reported geometry corruption at hold
+sample 301 (roughly five minutes). Startup confirms Kyo's Disable Facegen patch applied:
+two external writes, 73 total writes and 272 bytes. The normal control reproduced at sample
+385. The affected interior frame was dumped while the game was alive; it is less visually
+clear than the control's large stretched surfaces, so no claim of identical severity is made.
+The report is a negative result for the patch as a workaround, not proof that FaceGen can
+never contribute to any vertex-explosion issue.
+
+The latest alias count was 16,384 transfers with zero oversized writes. The refined access
+probe reported four coarse pending overlaps, zero exact pending overlaps in retained binding
+history, and no pending read notifications. No guest fault, GPU assertion or command-buffer
+overlap was reported. The owned run was stopped early after the report; it is not a completed
+1,800-sample performance hold. The first disabled trial remains excluded for its early quit.
+Do not enable the FaceGen-disable patch by default or claim that the synchronization
+experiment is accepted. Return to draw/resource-specific diagnostics, including allocation
+reuse and buffer access ordering. The existing frame analyzer groups passes and retains
+limited buffer samples; it does not yet identify an individual corrupt draw or its complete
+resource lifetime history. Its game-derived outputs belong only in ignored local test output.
