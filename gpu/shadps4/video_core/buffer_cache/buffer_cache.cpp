@@ -693,6 +693,21 @@ BufferCache::BufferCache(const Vulkan::Instance& instance_, Vulkan::Scheduler& s
                        runtime_memory_pool_view(&pool, &pool_size),
                    "The GPU has no sparse buffers and cannot import the game's memory");
         pool_buffer = std::make_unique<Buffer>(instance, pool, pool_size, "Guest memory pool");
+        // MoltenVK draws data from past 4 GiB in the pool wrongly: vertex and index bytes that drew
+        // correctly lower gave stretched objects and missing walls once areas loaded there, until
+        // a restart (KosmicKrisp, on the same path, drew them correctly). Bindings from
+        // POOL_SPLIT_AT on use a second import of that part of the pool, its own Metal buffer, so
+        // no binding offset reaches 4 GiB. A buffer bound to the pool's memory at an offset is not
+        // enough: MoltenVK uses the same Metal buffer at the same offset. BB_POOL_SPLIT=0: off.
+        const char* split_env = std::getenv("BB_POOL_SPLIT");
+        if (pool_size > POOL_SPLIT_AT && !(split_env && split_env[0] == '0')) {
+            pool_upper = std::make_unique<Buffer>(instance, static_cast<u8*>(pool) + POOL_SPLIT_AT,
+                                                  pool_size - POOL_SPLIT_AT,
+                                                  "Guest memory pool (upper)");
+            std::printf("Guest memory: bindings from %llu MiB use a second import of the pool "
+                        "(BB_POOL_SPLIT=0: off)\n",
+                        static_cast<unsigned long long>(POOL_SPLIT_AT >> 20));
+        }
         unified_memory.store(true, std::memory_order_relaxed);
         if (GuestInPlace()) {
             DisableGuestInPlace(); // the same idea, through sparse arenas
@@ -3745,6 +3760,9 @@ std::optional<std::pair<const Buffer*, u64>> BufferCache::UnifiedRange(VAddr add
         return std::nullopt;
     }
     UnifiedPageTable(addr, size);
+    if (pool_upper && phys >= POOL_SPLIT_AT) {
+        return std::pair<const Buffer*, u64>{pool_upper.get(), phys - POOL_SPLIT_AT};
+    }
     return std::pair<const Buffer*, u64>{pool_buffer.get(), phys};
 }
 

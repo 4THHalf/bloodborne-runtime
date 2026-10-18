@@ -19,7 +19,7 @@ root=$PWD
 arch=${BB_ARCH:-x86_64}
 case $arch in x86_64|arm64) ;; *) echo "BB_ARCH: x86_64 or arm64" >&2; exit 1 ;; esac
 prefix=$root/deps/macos-$arch
-work=$root/deps/build$([[ $arch == arm64 ]] && echo -arm64)
+work=$root/deps/build$([[ $arch == arm64 ]] && echo -arm64 || true)
 mkdir -p "$prefix" "$work/src"
 
 for tool in pkg-config glslangValidator nasm cmake ninja; do
@@ -187,10 +187,10 @@ if needed app-bash; then
     install -m755 "$work/src/app-bash/bash" "$prefix/app-runtime/bin/bash"
     mark app-bash
 fi
-# Python for the app bundle: python-build-standalone (relocatable, stripped), checksummed.
-if needed app-python; then
+# Python for the app bundle: python-build-standalone (relocatable, stripped), checksummed. The
+# app is packaged for arm64 only; an x86-64 (Rosetta 2) development build does without it.
+if [[ $arch == arm64 ]] && needed app-python; then
     echo "== app-python"
-    [[ $arch == arm64 ]] || { echo 'app-python: arm64 only' >&2; exit 1; }
     archive=$work/app-python.tar.gz
     [[ -f $archive ]] || curl -fsSL --retry 3 -o "$archive" \
         "https://github.com/astral-sh/python-build-standalone/releases/download/${PYTHON_STANDALONE/+/%2B}-aarch64-apple-darwin-install_only_stripped.tar.gz"

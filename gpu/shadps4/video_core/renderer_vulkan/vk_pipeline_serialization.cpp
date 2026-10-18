@@ -125,7 +125,11 @@ bool LoadShaderMeta(Serialization::Archive& ar, Shader::Info& info,
         return false;
     }
 
-    fetch_shader_data = spec.fetch_shader_data;
+    // Only the vertex stage has one: a later stage without one (geometry) must not erase it, or
+    // the pipeline is built with an empty fetch shader (ported from bbport 0.6-pre1, 72e5c8c).
+    if (spec.fetch_shader_data) {
+        fetch_shader_data = spec.fetch_shader_data;
+    }
     return true;
 }
 
@@ -233,6 +237,10 @@ bool PipelineCache::LoadGraphicsPipeline(Serialization::Archive& ar) {
     GraphicsPipeline::SerializationSupport sdata{};
     sdata.Deserialize(ar);
 
+    // An entry left half loaded must not lend its stages to this one (bbport 0.6-pre1).
+    sel.infos.fill(nullptr);
+    sel.modules.fill(nullptr);
+    sel.fetch_shader.reset();
     for (int stage_idx = 0; stage_idx < MaxShaderStages; ++stage_idx) {
         const auto& hash = sel.graphics_key.stage_hashes[stage_idx];
         if (!hash) {

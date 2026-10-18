@@ -989,3 +989,163 @@ The log contains one earlier 106-pass capture and no capture at the reported ons
 classify the earlier capture as corrupted or independently visually clean. No logged fault,
 GPU assertion or unknown SurfaceFormat appeared. The run is a reported reproduction, not a
 completed performance hold. A future onset capture must be triggered before the game closes.
+
+## Mesh data overwrites (2026-10-15)
+
+### Device loss reported as out of memory
+
+The maintainer's development session on 2026-10-15 stopped with
+`VK_ERROR_OUT_OF_DEVICE_MEMORY: Lost VkDevice after MTLCommandBuffer ... execution failed
+(code 9): Invalid Resource (kIOGPUCommandBufferCallbackErrorInvalidResource)`, then a
+`vk_semaphore.cpp:42 Refresh` assertion. MoltenVK reports any lost device with that Vulkan
+error; Metal's reason is an invalid resource in a command buffer, not memory exhaustion. Its
+log also showed the texture collector freeing nothing: its usage includes the 6,080 MiB
+imported guest pool, so it starts at 9,547 MiB and cached images grew to 3,505 (977 MiB)
+without a single eviction. The `RSS` field of the memory line reads 0 on macOS. The device
+loss is counted separately from the geometry symptom; its cause is not established.
+
+### Reload repairs the scene
+
+In `gc_stress2` the maintainer reported stretched geometry at hold sample 193; a game-frame
+dump confirms flat surfaces across buildings. Quitting to the title and continuing, in the
+same process, showed the same spot intact (dump confirmed). The log has no new direct or
+flexible mappings across the reload: the game reloaded the area into memory it kept, and
+the renderer's address-keyed state was not reset by an unmap. The corrupted data was therefore
+in the game's memory, not only in renderer caches. Later reloads (death, teleport, quit and
+continue) also produced new corruption: every load can break or repair it. Death reloads
+removed the player character's legs twice in two runs; they are the quickest trigger found.
+
+### Texture collector budget
+
+`gc_stress1` and `gc_stress2` forced the collector to evict (`BB_GC_BUDGET_MB=7500` and
+`6500`; 80–460 images per stats window, none written back). The played `gc_stress2` route
+reproduced at sample 193, inside the 138–548 range of earlier controls. Eviction pressure does
+not accelerate the symptom; the collector is not an established cause. A camera-only
+unattended run did not reproduce, as with earlier stationary holds.
+
+### Mesh watch diagnostic
+
+`BB_MESH_WATCH=1` (a temporary diagnostic, removed once the cause below was found) hashes, in the background,
+the bytes of every 64 KiB page that draws read as vertex or index data (only the bound spans).
+Data unchanged for 20 s that changes is reported with the last GPU write or announced CPU
+write into those bytes. A shader write into data unchanged for 20 s and drawn within the last
+second is followed: its bytes are compared before and after, and a confirmed change logs the
+shader, its binding, whether a draw-preparation worker computed the buffer descriptor and
+whether a fresh read differs, the shader's recent written ranges, the share of changed bytes
+that became zero, and requests a frame dump. The log contains guest addresses and stays in
+ignored test output. Limits: it cannot see data broken while it loads (not yet stable), and
+many confirmed shader writes are legitimate GPU-produced vertex data (particles, counters).
+
+In `mesh_play3` (pipeline and caches at defaults) the maintainer reported stretched sheets
+after a death reload, a missing tree trunk, missing candle holders and two full vertex
+explosions. Each report followed, within about a minute, a confirmed shader write over
+vertex data in use (drawn 100–1,800 times, unchanged for at least 20 s). The two explosions
+followed 256 KiB writes after which every word of the overwritten pages read as a huge or
+non-finite float; the missing objects followed writes that left no such words. The detector's
+own dump after one confirmation shows the corrupted scene. This is a timing association
+across five reports, not a demonstrated causal chain: the run confirmed 1,585 changes in all.
+
+In `mesh_play4`, no prepared write descriptor differed from a fresh read of the same
+descriptor in the whole run, so stale worker-computed descriptors are not the writer. One
+recurring shader writes a 1.4 MiB output at a different address on different occasions; its
+descriptor was read at binding, so the game chose those addresses.
+
+### bbport optimizations ruled out
+
+During `mesh_play4` every switchable optimization was disabled live (`BB_TOGGLE_FILE` mask
+2251796593508351: bits 0–19, 30 and 32–50; the log confirms the mask). A quit to title and
+continue afterwards loaded Hunter's Dream with floor pieces missing. An earlier missing
+headstone in the same run predated the switch and is not counted. The switchable bbport
+optimizations are therefore not necessary for the corruption.
+
+### Comparison with bbport-mac
+
+The maintainer reports that [bmy/bbport-mac](https://github.com/bmy/bbport-mac) (bbport 0.4)
+does not show the corruption. It runs the game's code as x86-64 under Rosetta 2 and Vulkan on
+KosmicKrisp, whose sparse buffers let it use bbport's ordinary buffer cache with GPU copies.
+This runtime translates the game's code with bbcpu (x86-TSO emulated with acquire/release
+accesses and fences) and, on MoltenVK without sparse buffers, lets the GPU use the game's
+memory in place. The x86-64 build of this runtime under Rosetta 2 keeps MoltenVK and the
+in-place memory and changes only the CPU side. In `rosetta1` (x86-64 build, default
+optimizations, mesh watch on) the maintainer reported the corruption at hold sample 402; the
+frame dump timed out. Death reloads in that run never removed objects or character parts,
+whereas every arm64 death test had. The symptoms are two defects:
+
+- Missing objects and character parts: not seen under Rosetta 2; bbcpu's translation is the
+  candidate. The death reload is the trigger for the translator bisection (`BB_JIT_DENY`).
+- Stretched geometry: seen under both; bbcpu is not necessary for it. The remaining
+  differences from bbport-mac are the Vulkan driver with the in-place memory it forces, and
+  the bbport base (0.4 versus 0.51 plus this runtime's changes).
+`scripts/macos/build-deps.sh` now builds x86-64 deps again: the build directory assignment
+exited under `set -e` for that architecture.
+
+### Stretching: further exclusions (2026-10-15 to 2026-10-18)
+
+Each of these reproduced the stretching on MoltenVK and was removed again:
+
+- **Shader bounds checks.** MoltenVK lacks `robustBufferAccess2`, so out-of-range guest
+  buffer stores are not dropped as on GCN. A per-binding size table with checked loads and
+  stores (`bounds2`) still reproduced at hold sample 73.
+- **Inline vertex fetch** (the fetch shader translated into the vertex shader, with its
+  loads checked) still reproduced.
+- **bbport optimizations.** `opts_off1` disabled every switchable optimization from startup
+  (`BASE_MASK=2251796593508351`) and reproduced at hold sample 142.
+- **Primitive restart and index alignment.** A probe for all-ones indices and misaligned
+  index offsets on MoltenVK found none in reproducing runs.
+- **Copy shader HLE.** A verifier re-read every copy after 300 ms and 5 s: the copies were
+  correct. A window for MoltenVK's 32-bit compute copy path (unaligned copies) was never
+  used.
+- **Timing.** MoltenVK capped at 5 FPS still stretched.
+- **Pipeline cache fetch shaders.** bbport 0.6-pre1 (`72e5c8c`) fixed cached pipelines with a
+  geometry stage receiving an empty fetch shader. The fix is kept (it is correct), but
+  `fetch1` still reproduced.
+- **File read retries.** `read()` could return EFAULT after moving the file offset, and the
+  retry then read a later part of the file. The offset is now restored before each retry
+  (kept); the stretching did not depend on it.
+
+## Stretching: the cause and the fix (2026-10-18)
+
+### The driver, on the same memory model
+
+The maintainer's route: Iosefka's Clinic streams in at its entrance after loading the copied
+save; the stretching appears there or earlier. A branch of bbport-mac (bbport 0.4, x86-64
+under Rosetta 2) with this runtime's unified-memory path (`BB_FORCE_UNIFIED=1`: the game's
+memory imported as one buffer instead of sparse arenas) separated the driver from the memory
+model:
+
+| Driver | Memory | Result |
+| --- | --- | --- |
+| KosmicKrisp | sparse arenas (bbport-mac as published) | clean |
+| KosmicKrisp | unified pool | clean (twice, whole clinic; 2–3 FPS) |
+| MoltenVK | unified pool | stretched, missing objects |
+| MoltenVK, capped at 5 FPS | unified pool | stretched |
+
+### The data was intact
+
+A triggered draw fingerprint (a temporary diagnostic, removed) hashed, for every draw of one
+frame, the index data and only the vertices that draw reads. Clean and broken MoltenVK frames
+at the clinic, from separate runs, were compared mesh by mesh. 78 meshes had byte-identical
+vertex and index data. The 14 that differed were per-frame data (three-vertex screen
+triangles, UI quads, skinned meshes) that also differed between two clean runs. The broken
+frame, with stretched objects and missing walls on screen, had 53 draws (12 meshes) whose
+vertex, index or constant data lay past 4 GiB in the 6,080 MiB pool (4,271–4,280 MiB). All
+its other bindings lay below 4,088 MiB. Ten of those twelve meshes had the same bytes as in
+the clean frames.
+
+### The fix
+
+Bindings from 3 GiB on now use a second import of that part of the pool (its own Metal buffer)
+with offsets relative to it, so no binding offset reaches 4 GiB (`BufferCache::pool_upper`;
+`BB_POOL_SPLIT=0`: off). A Vulkan buffer bound to the pool's memory at an offset would not do:
+MoltenVK maps it to the same Metal buffer at the same offset. Buffer device addresses are
+unchanged.
+
+- bbport-mac branch, MoltenVK, split: the maintainer walked the whole clinic with no
+  stretching or missing walls; the run before it, without the split, had both.
+- This runtime, split (`pool_split2`): visually clean on the route and through the clinic.
+- This runtime, `BB_POOL_SPLIT=0` (`pool_nosplit1`, same build): stretching at the clinic.
+
+Which MoltenVK path mishandles offsets past 4 GiB was not identified. The split adds one
+import at startup and no per-draw work; no FPS comparison was run. The device loss reported
+as out of memory and the missing objects after death reloads were not retested separately;
+the missing walls seen with the stretching on MoltenVK went away with the split.

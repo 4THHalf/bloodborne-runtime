@@ -89,3 +89,14 @@ The fresh-save opening `mv_cache_opening` used the warm shared cache with `BB_GP
 372 pipelines preloaded, playback completed, and the maintainer reported perfect playback.
 The game frame dump showed character creation. Neither run logged a fault, GPU assertion or
 invalid-mutex panic. Historical assertion counts are unchanged; N4 remains paused.
+
+### Fetch shaders in cached pipelines (bbport 0.6-pre1)
+
+Ported from [deadinside28/bloodborne_pc `72e5c8c`](https://github.com/deadinside28/bloodborne_pc/commit/72e5c8ce22ec0fa39481bc81aefbb761869d0691)
+(0.6-pre1). `LoadShaderMeta` keeps the vertex stage's fetch shader when a later stage (geometry)
+has none, instead of erasing it, and `LoadGraphicsPipeline` clears the previous entry's stages
+before loading the next. Without it, a cached pipeline with a geometry stage was built with an
+empty fetch shader. Serialization versions are unchanged: the cache format is the same. This was
+tested during the stretched-geometry investigation; it did not cause that symptom
+([stability notes](../STABILITY.md#stretching-the-cause-and-the-fix-2026-10-18)). The rest of
+0.6-pre1 (its new memory model and own renderer) has not been reviewed for porting.

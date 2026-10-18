@@ -354,3 +354,15 @@ published 0.6.0 package on the same active route before claiming a recent regres
 `geom_drawtrace1` subsequently reproduced per the maintainer, who closed the game at onset
 (last live hold sample 474). Only the earlier capture exists; no affected-frame capture was
 obtained and no new fault/assertion appeared. Binding/lifetime localization remains open.
+
+## Stretched geometry: fixed (2026-10-18)
+
+The stretching/vertex explosion and the missing walls seen with it were MoltenVK drawing data
+from past 4 GiB in the imported 6,080 MiB guest pool. Bindings from 3 GiB on now use a second
+import of the pool's upper part (`BufferCache::pool_upper`; `BB_POOL_SPLIT=0`: off), so no
+binding offset reaches 4 GiB. A buffer bound to the pool's memory at an offset is not enough
+(the same Metal buffer). Evidence (KosmicKrisp A/B on the same memory model, draw fingerprints
+showing intact data, split/no-split runs at Iosefka's Clinic) is in STABILITY. The FaceGen,
+synchronization and draw-trace notes above are history: none of those was the cause. Which
+MoltenVK path mishandles large offsets is not identified; keep any new pool-sized buffer split
+the same way.
