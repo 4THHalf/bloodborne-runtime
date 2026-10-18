@@ -86,8 +86,8 @@ gain from that pair.
 The valid pair lost 1.9 FPS (4.3%) and added 1.3 ms to p90 with the helper. All four
 runs completed without a fault or GPU assertion. The five fullscreen previews were
 visually reported as readable, including grades and The Old Hunters. These were synthetic
-previews, not natural unlocks, and did not alter the trophy log. Notifications remain
-off by default; persistence and the launcher view remain active.
+previews, not natural unlocks, and did not alter the trophy log. The launcher turns
+notifications on by default since 0.7.0; persistence and the launcher view work either way.
 
 A later `trophy_focus_final` isolated hold completed at 46.7 FPS and p90 23.2 ms
 without a fault, but the chat app remained frontmost in all 40 window samples. The
