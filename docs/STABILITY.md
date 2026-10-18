@@ -1148,4 +1148,6 @@ unchanged.
 Which MoltenVK path mishandles offsets past 4 GiB was not identified. The split adds one
 import at startup and no per-draw work; no FPS comparison was run. The device loss reported
 as out of memory and the missing objects after death reloads were not retested separately;
-the missing walls seen with the stretching on MoltenVK went away with the split.
+the missing walls seen with the stretching on MoltenVK went away with the split. The maintainer
+also reports that the Yharnam black sky with streaks and the objects popping in, listed
+separately as known issues until 0.7.0, are gone with it: the same cause.
