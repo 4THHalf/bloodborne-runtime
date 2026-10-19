@@ -39,7 +39,7 @@ On top of the game's own rendering, the port adds:
 ## The app
 
 `Bloodborne.app` contains the game program, its libraries, a bundled Python and bash for the
-start-up scripts, and the launcher ([`launcher/app`](https://github.com/bloodborne-native/bloodborne-mac/tree/main/launcher/app) in bloodborne-mac, Tauri with React). The
+start-up scripts, and the launcher ([`launcher`](https://github.com/bloodborne-native/bloodborne-mac/tree/main/launcher) in bloodborne-mac, Tauri with React). The
 launcher writes the settings and starts `run.sh`. `run.sh` checks the game folder, prepares
 patches and mods, and starts the game.
 
