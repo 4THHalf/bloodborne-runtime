@@ -100,3 +100,30 @@ empty fetch shader. Serialization versions are unchanged: the cache format is th
 tested during the stretched-geometry investigation; it did not cause that symptom
 ([stability notes](../STABILITY.md#stretching-the-cause-and-the-fix-2026-10-18)). The rest of
 0.6-pre1 (its new memory model and own renderer) has not been reviewed for porting.
+
+## bbport 0.6 and Windows fork review (2026-10-19)
+
+bbport 0.6 (`8185b88`) and the Supermedo Windows branch up to `de2e38a` (1.9.2, from `e5d04e2`)
+were reviewed. bbport 0.6 replaced shadPS4's layout with its own renderer, so its changes are
+ported by hand; the imported compatibility level stays 0.51. Planned items are tracked in
+bloodborne-mac's `docs/ROADMAP.md`.
+
+| Source | Decision |
+|---|---|
+| bbport 0.6: blur-kernel assertion `0xa0020007` | Ported (`runtime_kernel.c`). Under bbcpu the call site is the import's guest return address (`bbcpu_import_return`) instead of a host stack scan. |
+| bbport 0.6: larger GX per-frame command heap | Ported as a patch, on by default (`BB_GX_HEAP=0`: off): bbport also guards the sites with hooks, which this port does not have. |
+| bbport 0.6: thread records below 40 bits | Not needed: the runtime's C allocations already come from its own heap below 1 TiB (`runtime_heap.h`). |
+| Fork `3e3b760` (parsifal295): impossible number conversion | Ported, and extended to `SurfaceFormat` (our watch-list assertions `6/1`, `15/4`): the same data format with an existing number format, logged. |
+| Fork `c07f0ff` (parsifal295): garbage PM4 header | Ported: the rest of the buffer is dropped, the first 16 reported with `ReportBadPacket`; `BB_PM4_STOP=1` stops as before. |
+| Fork `2c4ddeb`: null vertex-buffer table | Ported, with a log line for each null table read. bbport 0.6 fixes the same crash ("139"). |
+| Fork `76f5b5f` (from Awaken's port): flip IRQ ahead of its label | Ported. |
+| bbport 0.6: Laurence's cinematic, pixel-shader-less pipelines, push constants after the pass begins, frame-rate/input/effect/aspect hooks, online module | Deferred: on the roadmap. Hooks that emit x86 thunks become bbcpu trap handlers. |
+| Fork `9566a1d`, `5012c6f` (stretched polygons) | Skipped: bugs of the fork's shadPS4 0.20.1 base (56 bindings, index capacity clamp); our push block and index binding do not have them. |
+| Fork `08cd804` (barrier memo) | Already here (`AccessMemo`). |
+| Fork `4f3dd91` (`VK_EXT_device_fault`) | Skipped: MoltenVK lacks it. |
+| bbport 0.6 new memory model, fork VRAM budget changes, NVIDIA/Intel/Windows/DLSS/frame generation/FSR 4.1.1 | Not applicable on this port's unified pool and Apple GPUs. |
+
+Checks: `build.sh` and the runtime tests (unchanged pre-existing failures). Two copied-save
+playtests (`batchA_lamps`, `batchA_play2`; lamp travel, fights) ran without a fault, assertion
+or any of the new fallbacks firing; the maintainer reported no regression. Blood decals drawn
+pale and an enemy's body drawn as colour noise were reported in these runs as older bugs.

@@ -67,6 +67,16 @@ def skip_network_choice(env=os.environ):
     return env.get('BB_SKIP_NETWORK_CHOICE','1')!='0'
 
 
+# bbport 0.6: each GX command buffer's per-frame heap 1 MiB instead of 256 KiB (the game's NULL
+# allocations at 0x2199310 crashed when it filled). bbport also guards those sites with hooks;
+# this port has only the patch, so it is on by default. BB_GX_HEAP=0: off.
+GX_HEAP='Larger GX Per-Frame Command Heap'
+
+
+def gx_heap(env=os.environ):
+    return env.get('BB_GX_HEAP','1')!='0'
+
+
 def intel_tonemap_fix(env=os.environ, cpuinfo='/proc/cpuinfo'):
     forced=env.get('BB_INTEL_TONEMAP_FIX')
     return forced=='1' if forced in ('0','1') else intel_cpu(cpuinfo)
@@ -356,6 +366,8 @@ def main():
         names.append(INTEL_TONEMAP)
     if skip_network_choice() and SKIP_NETWORK_CHOICE not in names:
         names.append(SKIP_NETWORK_CHOICE)
+    if gx_heap() and GX_HEAP not in names:
+        names.append(GX_HEAP)
     names=validate_patch_requirements(names,a.game_dir)
     segments=eboot_segments((a.out/'eboot.elf').read_bytes())
     writes=compile_patches(a.xml,names,a.app_version,segments)

@@ -6,6 +6,7 @@
 #include "video_core/amdgpu/pixel_format.h"
 #include "video_core/renderer_vulkan/liverpool_to_vk.h"
 
+#include <atomic>
 #include <magic_enum/magic_enum.hpp>
 
 #define INVALID_NUMBER_FORMAT_COMBO                                                                \
@@ -786,10 +787,29 @@ vk::Format TrySurfaceFormat(AmdGpu::DataFormat data_format, AmdGpu::NumberFormat
 
 vk::Format SurfaceFormat(AmdGpu::DataFormat data_format, AmdGpu::NumberFormat num_format) {
     vk::Format result = surface_format_table[GetSurfaceFormatTableIndex(data_format, num_format)];
-    bool found =
-        result != vk::Format::eUndefined || data_format == AmdGpu::DataFormat::FormatInvalid;
-    ASSERT_MSG(found, "Unknown data_format={} and num_format={}", static_cast<u32>(data_format),
-               static_cast<u32>(num_format));
+    if (result != vk::Format::eUndefined || data_format == AmdGpu::DataFormat::FormatInvalid) {
+        return result;
+    }
+    // bbport: a combination no real descriptor has (seen: data_format=6/num_format=1 and 15/4),
+    // read from game memory the game may be rewriting (a stale sharp). It stopped the game; now
+    // the same data format with a number format that exists keeps the element size, and that
+    // draw reads garbage for a frame. Same approach as Supermedo/bloodborne_pc 3e3b760
+    // (parsifal295, PR #55) for the number conversion.
+    for (const auto fallback : {AmdGpu::NumberFormat::Unorm, AmdGpu::NumberFormat::Float,
+                                AmdGpu::NumberFormat::Uint}) {
+        result = surface_format_table[GetSurfaceFormatTableIndex(data_format, fallback)];
+        if (result != vk::Format::eUndefined) {
+            break;
+        }
+    }
+    static std::atomic<u32> reported{0};
+    if (reported.fetch_add(1, std::memory_order_relaxed) < 8) {
+        LOG_WARNING(Render_Vulkan, "Unknown data_format={} and num_format={} (a stale descriptor?): "
+                                   "read as {}", static_cast<u32>(data_format),
+                    static_cast<u32>(num_format), vk::to_string(result));
+    }
+    ASSERT_MSG(result != vk::Format::eUndefined, "Unknown data_format={} and num_format={}",
+               static_cast<u32>(data_format), static_cast<u32>(num_format));
     return result;
 }
 

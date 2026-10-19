@@ -12,7 +12,9 @@ project it is based on.
   repository since October 2026. Its releases are merged here as they come out (now **0.51**), with
   their history; the merge commits name each one. It provides the loader, the PS4 runtime, the
   renderer extensions, the upscalers, the game-specific fixes and the original launcher. Code
-  taken from it keeps its authorship in the git history.
+  taken from it keeps its authorship in the git history. Individual fixes from later releases
+  are ported by hand and named in the commit and `upstream/RENDERER_PORTS.md` (from 0.6: the
+  blur-kernel assertion and the larger GX command heap patch).
 - [**shadPS4**](https://github.com/shadps4-emu/shadPS4): the video core and shader recompiler
   (GPL-2.0+), and [sirit](https://github.com/shadps4-emu/sirit).
 - **shadp2p** (a shadPS4 fork, GPL-2.0): the network and PSN libraries of the online module
@@ -42,6 +44,12 @@ Changes taken from other ports of bbport, with thanks:
   storage and texture-cache reference reacquisition, following upstream shadPS4. Adapted with
   POSIX page protection inside the reserved mapping, fatal allocation checks and a normal-flow
   regression test. No game code or assets were taken.
+- [**Supermedo/bloodborne_pc**](https://github.com/Supermedo/bloodborne_pc) (GPL-2.0-or-later),
+  robustness fixes from 1.7.7–1.8.2, each written anew there from community pull requests:
+  a stale texture format no longer stops the game (`3e3b760`, idea from parsifal295, PR #55);
+  a garbage PM4 header drops the rest of its buffer (`c07f0ff`, parsifal295, PR #57); a draw
+  whose vertex buffer table pointer is null is skipped (`2c4ddeb`); a flip IRQ ahead of its
+  label waits briefly instead of stopping the game (`76f5b5f`, from Awaken's port).
 - [**bmy/bbport-mac**](https://github.com/bmy/bbport-mac) (Rosetta 2 port of bbport to macOS):
   - the Retina-resolution window (`gpu/shim/window.cpp`, `BB_RETINA`);
   - the texture cache hashing whole images when checking a possibly changed one (the item
