@@ -1541,8 +1541,9 @@ void TextureCache::DeleteImage(ImageId image_id) {
         }
     }
 
-    // Reclaim image and any image views it references.
-    scheduler.DeferOperation([this, image_id] {
+    // Reclaim image and any image views it references (bbport: past the next submission, which
+    // can still hold draws the draw pipeline prepared before this deletion).
+    scheduler.DeferOperationPastNext([this, image_id] {
         Image& image = slot_images[image_id];
         for (auto& backing : image.backing_images) {
             for (const ImageViewId image_view_id : backing.image_view_ids) {

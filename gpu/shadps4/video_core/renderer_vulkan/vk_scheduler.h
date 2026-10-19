@@ -1111,6 +1111,17 @@ public:
         num_pending_ops.fetch_add(1, std::memory_order_release);
     }
 
+    /// bbport: as DeferOperation, but until the GPU is past the submission after the current
+    /// one. For resources the draw pipeline's stage B may still reference: it records draws
+    /// stage A prepared before the deferral, and those can land in the next submission (Metal:
+    /// texture-cache image views "destroyed while still required to be alive by the command
+    /// buffer"; 40 in a load with the pipeline, none with it off or with this deferral).
+    void DeferOperationPastNext(Common::UniqueFunction<void>&& func) {
+        std::unique_lock lk(pending_ops_mutex);
+        pending_ops.emplace(std::move(func), CurrentTick() + 1);
+        num_pending_ops.fetch_add(1, std::memory_order_release);
+    }
+
     /// Defers an operation until the gpu has reached the current cpu tick.
     /// Runs as soon as possible in another thread.
     void DeferPriorityOperation(Common::UniqueFunction<void>&& func) {

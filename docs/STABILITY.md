@@ -1151,3 +1151,35 @@ as out of memory and the missing objects after death reloads were not retested s
 the missing walls seen with the stretching on MoltenVK went away with the split. The maintainer
 also reports that the Yharnam black sky with streaks and the objects popping in, listed
 separately as known issues until 0.7.0, are gone with it: the same cause.
+
+## GPU device loss with motion vectors: fixed on main (2026-10-19)
+
+The "out of memory" crash (`VK_ERROR_OUT_OF_DEVICE_MEMORY: Lost VkDevice ... Invalid Resource`)
+came in a boss fight with character motion vectors on and with FSR switched while they were on.
+Metal API validation (`MTL_DEBUG_LAYER=1`, errors logged), from a backup just before the boss,
+named objects "destroyed while still required to be alive by the command buffer". Three causes:
+
+- **The residency set.** Our Metal residency set is attached to the graphics queue, so every
+  command buffer in flight counts everything that was in the set when it was committed.
+  Allocations and images were removed and freed at once, while such command buffers ran.
+  Removed objects are now retained until the GPU completes the submission open at their removal
+  (`BbMetalResidency::SetTicks`, released on each submission).
+- **Texture-cache deletions one submission too early.** The draw pipeline's stage B records
+  draws stage A prepared before a deletion, and they can land in the next submission. In a load
+  from the backup: 40 early destroys of images and views with the pipeline on, 6 with only the
+  preparation workers off, 0 with the pipeline off. Deletions now wait for the submission after
+  the current one (`Scheduler::DeferOperationPastNext`).
+- **Large staging buffers.** A 64 MiB detiler buffer, trimmed ~3,000 submissions after its only
+  use, was still referenced by later command buffers (MoltenVK's Metal argument buffers keep the
+  push descriptors' buffers). Without argument buffers (`MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS=0`)
+  our frame rate fell from ~30 to ~4 FPS, so large staging buffers are now kept for reuse
+  (`BB_STAGING_TRIM_LARGE=1`: trimmed as before).
+
+Runs (copied backup, motion vectors on): without the staging change the game lost the device
+~75 s in (after the residency and deletion fixes), as every earlier run from that backup did.
+With all three, the boss fight was won and the session ended normally (`boss_motion14`); a
+20-minute launcher session on the maintainer's own save after a restart had no crash, 50–65 FPS
+(lowest 38), Vulkan memory flat at ~1.6 GB. A residency counter (`BB_FRAME_STATS`) showed 0
+objects waiting and ~2,000 released per run. Frame-rate drops to 3–15 FPS seen in some test
+runs came with Metal validation on and a nearly full swap (8 of 9 GB after a day of runs); none
+in the clean session. Not yet A/B-measured: the cost of the three changes (expected nil).

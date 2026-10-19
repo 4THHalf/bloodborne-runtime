@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <dlfcn.h>
+#include "bbport_metal_residency.h"
 #include <map>
 #include <unordered_set>
 #include <xxhash.h>
@@ -103,6 +104,14 @@ Rasterizer::Rasterizer(const Instance& instance_, Scheduler& scheduler_, Runtime
       pipeline_cache{instance, scheduler, liverpool, buffer_cache.GetSparsePageShift()},
       host_markers_enabled{EmulatorSettings.IsVkHostMarkersEnabled()},
       guest_markers_enabled{EmulatorSettings.IsVkGuestMarkersEnabled()} {
+    // bbport (macOS): objects removed from the Metal residency set stay alive until the GPU has
+    // completed the submission open at their removal (bbport_metal_residency.h).
+    BbMetalResidency::SetTicks(
+        [](void* context) { return static_cast<Scheduler*>(context)->CurrentTick(); },
+        [](void* context) {
+            return static_cast<Scheduler*>(context)->GetWorkSemaphore()->KnownGpuTick();
+        },
+        &scheduler);
     // Before the rasterizer is bound: Liverpool enqueues buffers only once it sees it.
     draw_prep = std::make_unique<DrawPreparation>(pipeline_cache);
     scene_targets = std::make_unique<SceneTargets>(instance, scheduler, runtime, texture_cache);
@@ -134,7 +143,9 @@ Rasterizer::Rasterizer(const Instance& instance_, Scheduler& scheduler_, Runtime
     });
 }
 
-Rasterizer::~Rasterizer() = default;
+Rasterizer::~Rasterizer() {
+    BbMetalResidency::SetTicks(nullptr, nullptr, nullptr);
+}
 
 vk::ImageView Rasterizer::NullImageView(const Shader::ImageResource& desc,
                                         const AmdGpu::Image& sharp) const {
@@ -2392,6 +2403,7 @@ void Rasterizer::OnSubmit() {
     texture_cache.ProcessDownloadImages();
     texture_cache.RunGarbageCollector();
     runtime.TickFrame();
+    BbMetalResidency::ReleaseRetired();
 }
 
 const PreparedStage* Rasterizer::FindPreparedStage(const Shader::Info& stage) const {

@@ -366,3 +366,15 @@ showing intact data, split/no-split runs at Iosefka's Clinic) is in STABILITY. T
 synchronization and draw-trace notes above are history: none of those was the cause. Which
 MoltenVK path mishandles large offsets is not identified; keep any new pool-sized buffer split
 the same way.
+
+## GPU device loss with motion vectors: fixed on main (2026-10-19)
+
+Three object-lifetime bugs gave Metal "Invalid Resource" (`VK_ERROR_OUT_OF_DEVICE_MEMORY`):
+objects removed from the queue's residency set and freed while committed command buffers still
+counted them (now retained until the submission open at removal completes); texture-cache
+deletions before the draw pipeline's stage B recorded its prepared draws (now one submission
+later); large staging buffers destroyed while MoltenVK's argument buffers still referenced them
+(now kept). Metal API validation found them: `MTL_DEBUG_LAYER=1
+MTL_DEBUG_LAYER_ERROR_MODE=nslog`, then search the log for "being destroyed while still required"
+(the window's BGRA8 sRGB drawable is noise). Argument buffers off cost ~85% FPS here: do not
+disable them. STABILITY has the runs.
