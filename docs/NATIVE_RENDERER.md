@@ -68,19 +68,25 @@ GPU's idle time and in what each pass costs.
   Vulkan-specific parts behind the backend interface.
 - **Shaders (shared):** GCN → shadPS4's intermediate form → SPIR-V (Vulkan) or MSL (Metal), ahead
   of time.
-- **Backends:** Vulkan (today's code, moved behind the interface) and Metal. D3D12 is possible
-  later. Unleashed Recompiled's render layer (plume, MIT, with Vulkan, D3D12 and Metal backends)
-  was evaluated for N4; the decision and gaps are below.
+- **Backends:** Vulkan (today's code) and Metal. D3D12 is possible later. Unleashed Recompiled's
+  render layer (plume, MIT, with Vulkan, D3D12 and Metal backends) was evaluated for N4; the
+  decision and gaps are below.
+- **Where the Metal backend meets the core (since 2026-10-20):** at the Vulkan calls the renderer
+  already makes. A layer under vulkan.hpp's dispatcher encodes the Metal path's command buffers in
+  Metal and sends every other one to MoltenVK; Linux and Windows keep real Vulkan. Vulkan's enum
+  values stay the shared vocabulary of the pipeline keys; no Vulkan handle is in them. See
+  [the route change](#route-change-n5-before-n4s-command-stream-2026-10-20).
 
 ## Progress roadmap
 
 Each bar has 20 blocks, one per 5%. Percentages track the accepted scope of each step, not
 remaining time. N1 is closed: deferred clears are accepted, fixed-quad triangles were measured
-and left opt-in, and extra copy grouping showed no gain. N4's interface design is approved;
-Linux CI passes and the first buffer-resource slice is opt-in with its game measurements checked.
-N4 remains paused after that slice. The [opening-video state race](STABILITY.md) is now guarded;
-10 guarded openings completed and capped/uncapped gameplay gates passed. This fix does not
-advance the renderer migration.
+and left opt-in, and extra copy grouping showed no gain. N4's first buffer-resource slice is
+opt-in; its command stream is not needed for N5 any more (the route change below). N5 began on
+2026-10-20 by adapting Wooloomooloo2/bloodborne_mac_port's Metal renderer: every pipeline builds
+in Metal (550, 0 failed) and the frame draws through Metal behind the launcher's experimental
+Renderer option (`BB_METAL_FRAME=1`), faster than MoltenVK in two alternating pairs (65.5/61.7
+against 58.0/58.1 FPS). Resources are still MoltenVK's; MoltenVK stays the default.
 
 | Step | Progress | Next deliverable |
 |---|---|---|
@@ -88,7 +94,7 @@ advance the renderer migration.
 | N1 · frame planning measurements | 100% `████████████████████` | Closed; native tessellation planned for N5 |
 | N2 · shaders ahead of time | 0% `░░░░░░░░░░░░░░░░░░░░` | Inventory shader variants |
 | N3 · textures as objects | 0% `░░░░░░░░░░░░░░░░░░░░` | Trace texture creation sites |
-| N4 · backend interface | 10% `██░░░░░░░░░░░░░░░░░░` | Paused: opening-video stability |
+| N4 · backend interface | 10% `██░░░░░░░░░░░░░░░░░░` | Paused; the command stream waits for a backend that needs it (D3D12) |
 | N5 · Metal backend | 35% `███████░░░░░░░░░░░░░` | The frame draws through Metal (`BB_METAL_FRAME=1`); next: resources in Metal |
 | N6 · engine render boundary | 0% `░░░░░░░░░░░░░░░░░░░░` | Map engine calls after R4 |
 
@@ -101,8 +107,8 @@ N1 decisions:
    `BB_FIXED_QUAD_TRIANGLES=1` opt-in; do not develop a GPU expansion path.
 3. **Closed without a change:** grouping buffer copies did not improve the measured trace or
    level hold. Leave the current copy hoist intact.
-4. **Next platform work:** preserve the accepted Vulkan behavior while moving renderer operations
-   behind N4; validate native Metal tessellation in N5.
+4. **Next platform work:** preserve the accepted Vulkan behavior; native Metal tessellation is
+   drawn by N5's frame path (Metal's tessellator, the vertex and control stages as kernels).
 
 ## Steps
 
@@ -112,11 +118,12 @@ N1 decisions:
 | N1 | Measure frame planning changes in today's renderer | all | Closed (2026-10-12): clears accepted; tessellation moved to N5; copies unchanged |
 | N2 | Shaders ahead of time: every shader in the game's files converted at install (SPIR-V; MSL with N5) | all | |
 | N3 | Textures as objects: created when the game creates them (libGnm texture setup, the engine's texture loader), detiled once at install | all | |
-| N4 | The backend interface: the Vulkan-specific code of the renderer behind it | all | Paused after first buffer-resource slice for opening-video stability |
-| N5 | The Metal backend, replacing MoltenVK | macOS | |
+| N4 | The backend interface: the Vulkan-specific code of the renderer behind it | all | Paused after the first buffer-resource slice; its command stream is no longer a step before N5 |
+| N5 | The Metal backend, replacing MoltenVK | macOS | In progress (2026-10-20): pipelines and the frame through Metal behind an option; next, resources in Metal |
 | N6 | The engine's own render layer as the boundary (needs R4's names and structures) | all | |
 
-N2 and N3 can improve every backend; N4 and N5 remove MoltenVK on macOS.
+N2 and N3 can improve every backend; N5 removes MoltenVK on macOS once resources are created in
+Metal too.
 
 The first N1 change defers color clears until their next use. A pass that draws over the full
 cleared image uses a clear load action; other uses record the clear before accessing the image.
@@ -198,7 +205,31 @@ it; the runs varied more than the apparent reduction. The level holds were 46.7 
 without grouping, and 46.3 and 47.7 FPS with it (the latter trace failed). Further copy work
 needs to reduce render-pass breaks or measured idle, not just command calls.
 
+## Route change: N5 before N4's command stream (2026-10-20)
+
+The approved N4 contract below put a backend-neutral command stream between the core and every
+backend, and required its last legacy recording lambda to go (59 sites) before N5 could start.
+On 2026-10-20 the maintainer chose to adapt what is compatible from
+[Wooloomooloo2/bloodborne_mac_port](https://github.com/Wooloomooloo2/bloodborne_mac_port), whose
+Metal renderer got there by another route, and N5 started on it:
+
+- **The boundary is the Vulkan API the renderer already uses.** A layer under vulkan.hpp's
+  dispatcher (`renderer_metal/mtl_vk_layer`) takes the command buffers the Metal path owns and
+  encodes them in Metal (`mtl_frame`); MoltenVK gets the rest. The renderer above is unchanged,
+  so Linux and Windows keep real Vulkan, and a command buffer can move to Metal one kind at a time
+  with MoltenVK as the fallback.
+- **Vocabulary:** Vulkan enum values as plain data in the shared pipeline keys
+  (`vk_pipeline_key.h`) and blend rules (`AttachmentBlendState`); no handles, instance or
+  scheduler. This narrows the rule below that the core sees no `vk::` types.
+- **What N4's contract still decides:** resource lifetimes and access declarations stay
+  backend-owned as described; the POD command stream is kept as the design for a backend that
+  cannot sit under Vulkan calls (D3D12), not as a step before Metal.
+
 ## N4 backend interface design (approved, 2026-10-12)
+
+> [!NOTE]
+> Its order ("zero escapes before N5") was overtaken by the route change above; the rest of the
+> design still applies.
 
 The design is approved; the first buffer-resource slice is implemented behind a switch. The inventory covers
 `renderer_vulkan/` and the buffer and texture caches that own Vulkan resources outside it. The
