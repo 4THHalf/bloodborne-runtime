@@ -692,21 +692,33 @@ BufferCache::BufferCache(const Vulkan::Instance& instance_, Vulkan::Scheduler& s
         ASSERT_MSG(instance.IsExternalMemoryHostSupported() &&
                        runtime_memory_pool_view(&pool, &pool_size),
                    "The GPU has no sparse buffers and cannot import the game's memory");
-        pool_buffer = std::make_unique<Buffer>(instance, pool, pool_size, "Guest memory pool");
-        // MoltenVK draws data from past 4 GiB in the pool wrongly: vertex and index bytes that drew
-        // correctly lower gave stretched objects and missing walls once areas loaded there, until
-        // a restart (KosmicKrisp, on the same path, drew them correctly). Bindings from
-        // POOL_SPLIT_AT on use a second import of that part of the pool, its own Metal buffer, so
-        // no binding offset reaches 4 GiB. A buffer bound to the pool's memory at an offset is not
-        // enough: MoltenVK uses the same Metal buffer at the same offset. BB_POOL_SPLIT=0: off.
+        // MoltenVK draws data from past 4 GiB in an imported buffer wrongly: vertex and index bytes
+        // that drew correctly lower gave stretched objects and missing walls once areas loaded
+        // there, until a restart (KosmicKrisp, on the same path, drew them correctly). A buffer
+        // bound to the pool's memory at an offset is not enough: MoltenVK uses the same Metal
+        // buffer at the same offset. So the pool is imported in windows, each its own Metal buffer:
+        // one starts every 3 GiB and reaches 512 MiB into the next, and a binding uses the window
+        // its start is in. The overlap is all the memory imported twice: a whole second import
+        // from 3 GiB (0.7.0) put 17 GB in the residency set at 1440p (10 GB pool) and the device
+        // was lost at start. BB_POOL_SPLIT=0: one import of the whole pool.
         const char* split_env = std::getenv("BB_POOL_SPLIT");
-        if (pool_size > POOL_SPLIT_AT && !(split_env && split_env[0] == '0')) {
-            pool_upper = std::make_unique<Buffer>(instance, static_cast<u8*>(pool) + POOL_SPLIT_AT,
-                                                  pool_size - POOL_SPLIT_AT,
-                                                  "Guest memory pool (upper)");
-            std::printf("Guest memory: bindings from %llu MiB use a second import of the pool "
-                        "(BB_POOL_SPLIT=0: off)\n",
-                        static_cast<unsigned long long>(POOL_SPLIT_AT >> 20));
+        const bool split = !(split_env && split_env[0] == '0');
+        for (u64 start = 0; start < pool_size; start += POOL_WINDOW_STEP) {
+            const u64 size = split ? std::min(POOL_WINDOW_SIZE, pool_size - start) : pool_size;
+            const std::string name = split && pool_size > POOL_WINDOW_STEP
+                                         ? "Guest memory pool " + std::to_string(pool_windows.size() + 1)
+                                         : std::string("Guest memory pool");
+            pool_windows.push_back(std::make_unique<Buffer>(instance, static_cast<u8*>(pool) + start,
+                                                            size, name));
+            if (!split || start + size >= pool_size) {
+                break;
+            }
+        }
+        if (pool_windows.size() > 1) {
+            std::printf("Guest memory: the pool is imported in %zu windows of up to %llu MiB, one "
+                        "every %llu MiB (BB_POOL_SPLIT=0: one import)\n",
+                        pool_windows.size(), static_cast<unsigned long long>(POOL_WINDOW_SIZE >> 20),
+                        static_cast<unsigned long long>(POOL_WINDOW_STEP >> 20));
         }
         unified_memory.store(true, std::memory_order_relaxed);
         if (GuestInPlace()) {
@@ -3760,10 +3772,19 @@ std::optional<std::pair<const Buffer*, u64>> BufferCache::UnifiedRange(VAddr add
         return std::nullopt;
     }
     UnifiedPageTable(addr, size);
-    if (pool_upper && phys >= POOL_SPLIT_AT) {
-        return std::pair<const Buffer*, u64>{pool_upper.get(), phys - POOL_SPLIT_AT};
+    const size_t window = PoolWindow(phys);
+    const u64 start = window * POOL_WINDOW_STEP;
+    const Buffer* buffer = pool_windows[window].get();
+    if (phys - start + size > buffer->SizeBytes()) {
+        // Longer than the windows overlap (512 MiB): never seen; a copy instead.
+        static std::atomic<bool> logged{false};
+        if (!logged.exchange(true)) {
+            std::printf("Guest memory: a %llu MiB binding crosses the end of pool window %zu\n",
+                        static_cast<unsigned long long>(size >> 20), window + 1);
+        }
+        return std::nullopt;
     }
-    return std::pair<const Buffer*, u64>{pool_buffer.get(), phys};
+    return std::pair<const Buffer*, u64>{buffer, phys - start};
 }
 
 void BufferCache::UnifiedPageTable(VAddr addr, u64 size) {
@@ -3780,8 +3801,12 @@ void BufferCache::UnifiedPageTable(VAddr addr, u64 size) {
             u64 phys = 0;
             uintptr_t mapping_end = 0;
             if (runtime_memory_pool_phys(at, &phys, &mapping_end)) {
+                // The window of the block's first byte holds the whole block.
                 const u64 into_block = at - (block << block_shift);
-                entries.emplace_back(block, pool_buffer->BufferDeviceAddress() + phys - into_block);
+                const u64 base = phys >= into_block ? phys - into_block : 0;
+                const size_t window = PoolWindow(base);
+                entries.emplace_back(block, pool_windows[window]->BufferDeviceAddress() + phys -
+                                                into_block - window * POOL_WINDOW_STEP);
             }
         }
     });
