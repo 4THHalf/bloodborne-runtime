@@ -477,6 +477,11 @@ draw on MoltenVK against 5.59 and 5.27 on Metal. All four runs completed without
 path logged 0 draws without a Metal pipeline and 0 unsupported commands, and a frame capture
 showed the same picture. The FPS counter's big size names the renderer (Metal, MoltenVK, Vulkan).
 
+**With the recompiled CPU code** (2026-10-20): the same place with `BB_RECOMP_LIB` (240,994 of
+241,031 game functions replaced) and the Metal frame path drew the same picture at 51.7–57.3 FPS
+in its last frame-stat windows, against 61.7–65.5 FPS for the translator with Metal: the
+recompiled code's known CPU cost (R3), not the renderer. One run, not an A/B pair.
+
 Next: resources created in Metal (images, buffers, the guest-memory pool), then MoltenVK can be
 left out on macOS; each step behind a switch and measured against MoltenVK on our build.
 
