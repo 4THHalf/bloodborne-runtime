@@ -13,8 +13,14 @@ project it is based on.
   their history; the merge commits name each one. It provides the loader, the PS4 runtime, the
   renderer extensions, the upscalers, the game-specific fixes and the original launcher. Code
   taken from it keeps its authorship in the git history. Individual fixes from later releases
-  are ported by hand and named in the commit and `upstream/RENDERER_PORTS.md` (from 0.6: the
-  blur-kernel assertion and the larger GX command heap patch).
+  are ported by hand and named in the commit and `upstream/RENDERER_PORTS.md`. From 0.6
+  (`8185b88`), which replaced bbport's renderer and so is not merged whole: the blur-kernel
+  assertion, the larger GX command heap patch, the push-constant and fragment-info renderer
+  fixes, the present's wait stage, the frame rate through hooks (`bbport_frame_rate.cpp`,
+  `bbport_guest_code.h`), the interface of its game-code hooks (`bbport_guest_code_hooks.h`, after
+  shadPS4's InstallGuestCodeHook in the shadp2p/BBSC forks), Laurence's cinematic fixes (render
+  job slots, the resource cache in the port's direct memory), the live effect switches and the
+  SSAO safety check (`bbport_effect_flags.h`), ported in `bbport_game_hooks.cpp`.
 - [**shadPS4**](https://github.com/shadps4-emu/shadPS4): the video core and shader recompiler
   (GPL-2.0+), and [sirit](https://github.com/shadps4-emu/sirit).
 - **shadp2p** (a shadPS4 fork, GPL-2.0): the network and PSN libraries of the online module

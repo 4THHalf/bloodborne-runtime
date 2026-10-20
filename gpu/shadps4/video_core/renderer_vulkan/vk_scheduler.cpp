@@ -1152,9 +1152,12 @@ void Scheduler::SubmitExecution(SubmitInfo& info) {
     const vk::Semaphore timeline = work_semaphore.Handle();
     info.AddSignal(timeline, signal_value);
 
+    // The second wait is the presented frame's ready semaphore: the present pass reads that
+    // frame with a blit (transfer stage), which ColorAttachmentOutput did not cover. From
+    // bbport 0.6 (8185b88, deadinside28/bloodborne_pc).
     static constexpr std::array<vk::PipelineStageFlags, 2> wait_stage_masks = {
         vk::PipelineStageFlagBits::eAllCommands,
-        vk::PipelineStageFlagBits::eColorAttachmentOutput,
+        vk::PipelineStageFlagBits::eAllCommands,
     };
 
     const vk::TimelineSemaphoreSubmitInfo timeline_si = {
@@ -1233,9 +1236,10 @@ void Scheduler::SubmitAsync(SubmitInfo& info) {
         }
         recorded_segments.fetch_add(num_cmdbufs, std::memory_order_relaxed);
         recorded_submissions.fetch_add(1, std::memory_order_relaxed);
+        // As above: every wait covers all stages (bbport 0.6).
         static constexpr std::array<vk::PipelineStageFlags, 4> wait_stage_masks = {
             vk::PipelineStageFlagBits::eAllCommands,
-            vk::PipelineStageFlagBits::eColorAttachmentOutput,
+            vk::PipelineStageFlagBits::eAllCommands,
             vk::PipelineStageFlagBits::eAllCommands,
             vk::PipelineStageFlagBits::eAllCommands,
         };

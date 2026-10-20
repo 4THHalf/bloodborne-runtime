@@ -2,6 +2,7 @@
 #include "bbport_settings.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -338,6 +339,21 @@ std::string EnvText(int key, const std::string& value) {
     return value;
 }
 
+/// Set by the frame rate hooks (bbport 0.6) when they run the game's pacer: the limit is live.
+std::atomic<void (*)(int)> live_fps_limit{nullptr};
+
+/// Launcher options applied while the game runs: fullscreen, and the frame rate limit with the
+/// frame rate hooks.
+bool IsLive(int key) {
+    return key == LauncherFullscreen || (key == LauncherFpsLimit && live_fps_limit.load());
+}
+
+void ApplyLive(int key, const std::string& value) {
+    if (key == LauncherFpsLimit) {
+        if (const auto apply = live_fps_limit.load()) apply(std::max(0, std::atoi(value.c_str())));
+    }
+}
+
 int LauncherIndex(const std::string& key) {
     for (int k = 0; k < LauncherKeyCount; ++k) {
         if (key == LauncherOptions[k].key) return k;
@@ -392,6 +408,7 @@ void ReadLauncher() {
             if (launcher_values[k] != value && k == LauncherFullscreen) {
                 fullscreen_request = value == "true" ? 1 : 0;
             }
+            ApplyLive(k, value);
             launcher_values[k] = value;
             known[key] = value;
             std::printf("Settings: %s=%s from the launcher\n", key.c_str(), value.c_str());
@@ -444,13 +461,18 @@ void SetLauncher(LauncherKey key, const std::string& value) {
     if (key == LauncherFullscreen && launcher_values[key] != value) {
         fullscreen_request = value == "true" ? 1 : 0;
     }
+    ApplyLive(key, value);
     launcher_values[key] = value;
+}
+
+void SetLiveFpsLimit(void (*apply)(int fps)) {
+    live_fps_limit.store(apply);
 }
 
 bool LauncherNeedsRestart() {
     std::scoped_lock lock{channel_mutex};
     for (int k = 0; k < LauncherKeyCount; ++k) {
-        if (k != LauncherFullscreen && launcher_values[k] != launcher_startup[k]) return true;
+        if (!IsLive(k) && launcher_values[k] != launcher_startup[k]) return true;
     }
     return false;
 }

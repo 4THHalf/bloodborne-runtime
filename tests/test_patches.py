@@ -89,6 +89,28 @@ class NativeUiTests(unittest.TestCase):
         self.assertIsNone(scaled_sizes({'output_res': '1280x720', 'upscaler': 'taa', 'preset': '3'}))
 
 
+class FrameRateTests(unittest.TestCase):
+    def test_frame_rate_needs_no_patches_but_with_hooks_off(self):
+        # Above 30 FPS hooks in the game's code run the frame rate (gpu/shim/bbport_frame_rate.cpp).
+        for fps in ('uncap', '60', '90', '30'):
+            self.assertEqual(patches.fps_patches(fps, {}), [], fps)
+        self.assertEqual(patches.fps_patches('uncap', {'BB_FRAME_HOOKS': '0'}),
+                         ['Uncap FPS++', 'Sprint Fix (High FPS)'])
+        self.assertEqual(patches.fps_patches('60', {'BB_FRAME_HOOKS': '0'}), ['60 FPS++'])
+
+
+class HotEffectTests(unittest.TestCase):
+    def test_live_effects_have_no_startup_patch_but_ssr(self):
+        off={k:'0' for k in patches.HOT_EFFECTS}
+        off['effect_ssr']='1'
+        self.assertEqual(patches.effect_patches(off, {}),
+                         ['Enable Screen Space Reflections (READ NOTE)'])
+        names=patches.effect_patches(off, {'BB_HOT_EFFECTS': '0'})
+        self.assertIn('Disable SSAO', names)
+        self.assertIn('Disable DoF', names)
+        self.assertIn('Disable SSAO', patches.effect_patches(off, {'BB_GAME_HOOKS': '0'}))
+
+
 class DebugPatchTests(unittest.TestCase):
     def test_camera_patch_is_optional_and_compatible_with_fps_and_debug_menu(self):
         self.assertEqual(effect_patches({'debug_camera': '0', 'debug_menu': '0'}), [])

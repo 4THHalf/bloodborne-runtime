@@ -1,4 +1,5 @@
 // bbport: SDL3 window for the Vulkan swapchain (X11, Wayland or a Metal layer on macOS).
+#include "bbport_frame_rate.h"
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -272,6 +273,13 @@ bool WindowSDL::PollEvents() {
         if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN && !mouse_captured.load(std::memory_order_relaxed) &&
             mouse_look.load(std::memory_order_relaxed) && !BbOverlay::MenuOpen()) {
             CaptureMouse(true);
+            continue;
+        }
+        // F3: the frame rate limit 30 on and off (the cinematic of Laurence hangs above 30 FPS).
+        // From bbport 0.6 (8185b88); only with the frame rate hooks.
+        if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat && event.key.key == SDLK_F3 &&
+            BbFrameRate::Unlocked()) {
+            BbFrameRate::SetLimit(BbFrameRate::Limit() == 30 ? 0 : 30);
             continue;
         }
         if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat && event.key.key == SDLK_F1 &&

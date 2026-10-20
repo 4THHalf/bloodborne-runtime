@@ -30,6 +30,8 @@ void runtime_mutex_report(void);
 uintptr_t runtime_memory_resolve(const char *name);
 void runtime_memory_report(void);
 int runtime_memory_is_mapped(uintptr_t address, uint64_t size);
+/* Direct memory past the game's size for the port's own guest allocations (runtime_memory.c). */
+int runtime_extra_direct_map(uint64_t size, uint64_t alignment, void **out);
 /* The CPU is about to write the range outside guest code (a file read): tells the GPU side. */
 void runtime_memory_note_write(uintptr_t address, uint64_t size);
 void runtime_memory_note_cpu_write(uintptr_t address, uint64_t size);

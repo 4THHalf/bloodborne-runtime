@@ -24,11 +24,28 @@ This is what lets the game run natively, without Rosetta 2. Details:
 The runtime ([`src/runtime_*.c`](../../src)) implements the PS4 operating system functions the
 game uses: memory, threads, files, audio, controllers and saves.
 
+Some features hook the game's own code instead of patching it (from bbport 0.6,
+[`gpu/shim/bbport_frame_rate.cpp`](../../gpu/shim/bbport_frame_rate.cpp) and
+[`bbport_game_hooks.cpp`](../../gpu/shim/bbport_game_hooks.cpp)):
+
+- **Frame rate:** above 30 FPS the game's frame pacer and main loop step by each frame's real
+  time, and 48 places tied to a 30 FPS frame follow it (physics timers, damping, cloth, the run's
+  wall check). The limit applies while playing; **F3** toggles a 30 FPS limit.
+  `BB_FRAME_HOOKS=0`: the community frame-rate patches instead.
+- **Effects** (chromatic aberration, depth of field, motion blur, SSAO, the game's anti-aliasing,
+  dynamic-light shadows) switch without a restart. `BB_HOT_EFFECTS=0`: patches at start.
+- **Laurence's cinematic above 30 FPS:** failed render jobs give their slot back, and the render
+  resource cache gets 512 MiB of the port's memory (`BB_DMEM_EXTRA_MB`).
+
+A hook is a jump to a small stub that bbcpu translates like the game's code; the stub's `int3`
+reaches the runtime with every register. `BB_GAME_HOOKS=0` turns the hooks other than the frame
+rate's off.
+
 ## Graphics: a shadPS4-derived renderer on Metal
 
 The renderer, derived from [shadPS4](https://github.com/shadps4-emu/shadPS4), translates the PS4
 GPU's commands and shaders to Vulkan. [MoltenVK](https://github.com/KhronosGroup/MoltenVK) runs
-that Vulkan on Metal. Development main also has an experimental native Metal renderer (the
+that Vulkan on Metal. Since app 0.8.0 there is also an experimental native Metal renderer (the
 launcher's Advanced → Renderer): the same renderer, with its commands, shaders and pipelines
 encoded in Metal directly instead of through MoltenVK.
 

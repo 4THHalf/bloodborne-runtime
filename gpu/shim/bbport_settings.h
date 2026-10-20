@@ -148,7 +148,9 @@ enum LauncherKey : int { LauncherFullscreen, LauncherDisplay, LauncherPresentMod
 std::string Launcher(LauncherKey key);
 /// The menu's change (sent to the launcher by the next Save).
 void SetLauncher(LauncherKey key, const std::string& value);
-/// A launcher option other than fullscreen differs from the one this run started with.
+/// The frame rate hooks apply the launcher's frame rate limit live through `apply`.
+void SetLiveFpsLimit(void (*apply)(int fps));
+/// A launcher option that is not applied live differs from the one this run started with.
 bool LauncherNeedsRestart();
 /// Before an in-game restart: the launcher options into the environment run.sh starts with.
 void ExportLauncherEnvironment();

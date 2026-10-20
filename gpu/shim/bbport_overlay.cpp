@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
+#include "bbport_game_hooks.h"
 #include "bbport_overlay.h"
 
 #include <algorithm>
@@ -475,7 +476,8 @@ bool RestartNeeded() {
                    s.live_resolution != s.startup_live_resolution ||
                    BbSettings::ResolutionNeedsRestart() || BbSettings::LauncherNeedsRestart();
     for (int e = 0; e < BbSettings::EffectCount; ++e) {
-        restart |= s.effects[e] != s.startup_effects[e];
+        const bool live = e < BbSettings::GameEffectCount && e != BbSettings::EffectSsr && BbGameHooks::HotEffects();
+        restart |= !live && s.effects[e] != s.startup_effects[e];
     }
     return restart;
 }
@@ -740,8 +742,12 @@ void GraphicsTab() {
     if (BeginCard("##effects", LT("graphics.effects"))) {
         Note(LT("graphics.effectsHint"));
         for (int e = 0; e < BbSettings::GameEffectCount; ++e) {
+            // Switched live by the game hooks (bbport 0.6): no restart note.
+            const bool live = e != BbSettings::EffectSsr && BbGameHooks::HotEffects();
             SwitchSetting(T(EffectKey(e)), s.effects[e],
-                          e == BbSettings::EffectSsr ? LT("options.effects.effect_ssrHint") : LT("common.restartNote"));
+                          e == BbSettings::EffectSsr ? LT("options.effects.effect_ssrHint")
+                          : live                     ? nullptr
+                                                     : LT("common.restartNote"));
         }
     }
     EndCard();
@@ -1721,6 +1727,8 @@ void Render(vk::CommandBuffer cmdbuf, vk::ImageView view, vk::Extent2D extent) {
         std::scoped_lock lock{imgui_mutex};
         ScriptedKeys();
     }
+    // Effects changed in the menu or by the launcher reach the game (bbport 0.6's live effects).
+    BbGameHooks::ApplyGameEffects();
     if (!Visible()) {
         return;
     }

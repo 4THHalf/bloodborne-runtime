@@ -18,6 +18,15 @@ EBOOT_BASE=0x400000
 # half speed (the game's wall detector measured distance per frame, a 30 FPS rule).
 FPS_PRESETS={'30':[],'60':['60 FPS++'],'90':['90 FPS++','Sprint Fix (High FPS)'],
              'uncap':['Uncap FPS++','Sprint Fix (High FPS)']}
+# Above 30 FPS the frame rate is done by hooks in the game's code (gpu/shim/bbport_frame_rate.cpp,
+# from bbport 0.6: 60 and 90 are the same as uncap, at most that many frames a second): no
+# patches. The patches only with BB_FRAME_HOOKS=0 (comparisons).
+
+
+def fps_patches(fps, env=os.environ):
+    if fps!='30' and env.get('BB_FRAME_HOOKS','1')!='0':
+        return []
+    return FPS_PRESETS[fps]
 # Upscaler presets (bbport.ini "preset", the in-game menu): output / render size ratio. The game
 # then renders at 1920x1080 / ratio and the port's temporal upscaler restores the output size.
 OUTPUT_SIZE=(1920,1080)
@@ -144,10 +153,20 @@ def validate_patch_requirements(names, game):
     return names
 
 
-def effect_patches(settings):
+# Effects the runtime switches live (gpu/shim/bbport_game_hooks.cpp, from bbport 0.6): no startup
+# patch, the runtime writes the same bytes from the settings (and again on every change).
+# BB_HOT_EFFECTS=0 or BB_GAME_HOOKS=0: the patches at start, as before. Screen-space reflections
+# also size a target in the renderer's constructor: always the complete patch at start.
+HOT_EFFECTS={'effect_chromatic_aberration','effect_dof','effect_motion_blur','effect_ssao',
+             'effect_game_aa','effect_dynamic_shadows'}
+
+
+def effect_patches(settings, env=os.environ):
     names=[]
+    hot=env.get('BB_HOT_EFFECTS','1')!='0' and env.get('BB_GAME_HOOKS','1')!='0'
     for key,(off,on) in EFFECTS.items():
         if key not in settings: continue
+        if hot and key in HOT_EFFECTS: continue
         name=on if settings[key]=='1' else off
         if name: names.append(name)
     lod=MODEL_LOD.get(settings.get('model_lod','0'))
@@ -360,7 +379,7 @@ def main():
         size=render_size(settings)
         if size: print(f'{size[0]}x{size[1]}')
         return
-    names=FPS_PRESETS[a.fps]+[n.strip() for n in a.extra.split(';') if n.strip()]
+    names=fps_patches(a.fps)+[n.strip() for n in a.extra.split(';') if n.strip()]
     names+=[n for n in effect_patches(read_settings(a.settings)) if n not in names]
     if intel_tonemap_fix() and INTEL_TONEMAP not in names:
         names.append(INTEL_TONEMAP)
