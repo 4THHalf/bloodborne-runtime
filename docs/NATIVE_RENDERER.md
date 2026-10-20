@@ -96,9 +96,11 @@ Huax-1839/bloodborne-macos), not merged: their renderer is Metal only.
 | Metal with the recompiled library, one run | 51.7–57.3 | |
 
 Every pipeline the game uses builds in Metal (550: 510 graphics, 40 compute; 0 failed). The
-frame path met 0 draws without a Metal pipeline and 0 unsupported commands. A full play session
-on Metal was stable. Recording costs a little more per draw on the GPU thread (5.3–5.6 against
-5.1–5.2 µs). Characters drawn black above 3.5 million scene pixels happen on Metal too.
+frame path met 0 draws without a Metal pipeline and 0 unsupported commands. An earlier full play
+session completed; a later native 1080p play session crashed on a GX worker, and a copied-save
+load aborted in Metal's fragment binding. Recording costs a little more per draw on the GPU
+thread (5.3–5.6 against 5.1–5.2 µs). Characters drawn black above 3.5 million scene pixels
+happen on Metal too.
 
 ## Next
 

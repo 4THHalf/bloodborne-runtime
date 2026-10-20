@@ -23,6 +23,11 @@ these were investigated. Run-by-run logs of the investigations are in this file'
 
 ## Open
 
+- **Native 1080p crashes.** A long Metal session ended at a null host instruction pointer on a
+  GX worker. The JIT's empty indirect-branch cache hid the guest branch site; bbcpu now reports
+  that site if the null target recurs. A copied-save load reached the same null guest object
+  access on both Metal and MoltenVK, so that loading fault is not Metal-specific. A separate
+  Metal run aborted in `setFragmentBytes` while loading. The underlying causes remain open.
 - **Characters drawn black above about 3.5 million scene pixels** (1440p without an upscaler or
   with Native AA, 4K Quality). The boundary lies between 3.45 and 3.67 million pixels, with FSR
   on or off, at 1440p or 4K output, with more memory, and on the Metal renderer too. No cap of
