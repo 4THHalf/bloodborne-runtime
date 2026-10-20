@@ -6,6 +6,7 @@
 #pragma once
 
 #include <array>
+#include <memory>
 #include "video_core/renderer_vulkan/vk_common.h"
 
 namespace Metal {
@@ -41,7 +42,7 @@ struct GraphicsEntry {
 };
 
 /// Null when the Vulkan pipeline has no Metal counterpart (yet).
-const GraphicsEntry* FindGraphics(VkPipeline pipeline);
+std::shared_ptr<const GraphicsEntry> FindGraphics(VkPipeline pipeline);
 const Metal::ComputePipeline* FindCompute(VkPipeline pipeline);
 void Forget(VkPipeline pipeline);
 /// Pipelines made outside the game's pipeline cache (host passes, detiling, copies): built from

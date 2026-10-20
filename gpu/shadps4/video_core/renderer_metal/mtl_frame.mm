@@ -378,7 +378,7 @@ bool PrepareDraw(Owned& o) {
         Log("a draw outside a render pass (skipped)");
         return false;
     }
-    const auto* entry = o.graphics;
+    const auto* entry = o.graphics.get();
     if (!entry || !entry->render) {
         ++stats.skipped_no_pipeline;
         return false;
@@ -1165,7 +1165,7 @@ std::pair<id<MTLBuffer>, u64> Scratch(Owned& o, u64 size) {
 /// compute kernels writing scratch memory, then the patch draw in the reopened render pass.
 void TessellatedDraw(Owned& o, u32 count, u32 instance_count, u32 first, s32 vertex_offset,
                      u32 first_instance, bool indexed, u32 first_index) {
-    const auto* entry = o.graphics;
+    const auto* entry = o.graphics.get();
     const Metal::TessellationPipeline& tess = *entry->tess;
     ++stats.tess_draws;
     if (o.last_draw_tess) {

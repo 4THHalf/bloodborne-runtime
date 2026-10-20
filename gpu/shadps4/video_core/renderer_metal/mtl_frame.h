@@ -14,6 +14,7 @@
 
 #include <array>
 #include <atomic>
+#include <memory>
 #include <unordered_map>
 #include <vector>
 #include "video_core/renderer_vulkan/vk_common.h"
@@ -90,7 +91,7 @@ struct Owned {
     u32 target_width{}, target_height{};
 
     // Bound state.
-    const MetalShadow::GraphicsEntry* graphics{};
+    std::shared_ptr<const MetalShadow::GraphicsEntry> graphics;
     const Metal::ComputePipeline* compute_pipeline{};
     bool graphics_bound{}; ///< a graphics pipeline was bound (even one without a Metal pipeline)
     std::array<u8, 256> push{};
@@ -128,7 +129,7 @@ struct Owned {
 
 /// The draw state a deferred patch draw needs (tessellation runs, FlushPending).
 struct DrawSnap {
-    const MetalShadow::GraphicsEntry* graphics{};
+    std::shared_ptr<const MetalShadow::GraphicsEntry> graphics;
     std::array<u8, 256> push{};
     std::unordered_map<u32, Binding> bindings;
     std::vector<VkViewport> viewports;

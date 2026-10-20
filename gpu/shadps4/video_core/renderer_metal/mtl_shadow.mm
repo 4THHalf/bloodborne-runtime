@@ -6,6 +6,7 @@
 
 #import <Metal/Metal.h>
 
+#include <algorithm>
 #include <atomic>
 #include <cstdio>
 #include <cstdlib>
@@ -48,14 +49,17 @@ struct State {
     Metal::DepthStencilCache depth_stencil{device};
     std::mutex mutex;
     std::unordered_map<u64, std::shared_ptr<std::vector<u32>>> spirv;      ///< by VkShaderModule
-    std::unordered_map<u64, std::unique_ptr<Metal::ShaderModule>> modules; ///< by VkShaderModule
+    std::unordered_map<u64, std::shared_ptr<Metal::ShaderModule>> modules; ///< by VkShaderModule
+    /// Metal PSOs hold compiled shader pointers beyond a Vulkan module handle's lifetime.
+    /// Keep one module per distinct SPIR-V, even when Vulkan reuses a handle.
+    std::unordered_map<u64, std::vector<std::shared_ptr<Metal::ShaderModule>>> module_cache;
 
     std::atomic<u32> graphics_ok{}, graphics_failed{}, compute_ok{}, compute_failed{};
     std::atomic<u32> rect_lists{}, tessellated{}, geometry{}, no_spirv{};
     std::atomic<u32> seen{};
 
     std::mutex pipelines_mutex;
-    std::unordered_map<VkPipeline, GraphicsEntry> graphics;
+    std::unordered_map<VkPipeline, std::shared_ptr<const GraphicsEntry>> graphics;
     std::unordered_map<VkPipeline, const Metal::ComputePipeline*> compute;
 
     static std::filesystem::path Dir() {
@@ -117,11 +121,11 @@ bool Enabled() {
     return enabled;
 }
 
-const GraphicsEntry* FindGraphics(VkPipeline pipeline) {
+std::shared_ptr<const GraphicsEntry> FindGraphics(VkPipeline pipeline) {
     auto& s = Get();
     std::scoped_lock lock{s.pipelines_mutex};
     auto it = s.graphics.find(pipeline);
-    return it == s.graphics.end() ? nullptr : &it->second;
+    return it == s.graphics.end() ? nullptr : it->second;
 }
 
 const Metal::ComputePipeline* FindCompute(VkPipeline pipeline) {
@@ -147,13 +151,25 @@ void Forget(VkPipeline pipeline) {
 
 void RegisterModule(vk::ShaderModule module, std::span<const u32> spirv) {
     auto& s = Get();
+    const u64 hash = XXH3_64bits(spirv.data(), spirv.size_bytes());
     auto words = std::make_shared<std::vector<u32>>(spirv.begin(), spirv.end());
-    // Named by its SPIR-V: the MSL disk cache keys on this.
-    auto metal = std::make_unique<Metal::ShaderModule>(
-        std::vector<u32>(spirv.begin(), spirv.end()), XXH3_64bits(spirv.data(), spirv.size_bytes()));
     std::scoped_lock lock{s.mutex};
-    s.spirv[u64(VkShaderModule(module))] = std::move(words);
-    s.modules[u64(VkShaderModule(module))] = std::move(metal);
+    const u64 handle = u64(VkShaderModule(module));
+    s.spirv[handle] = std::move(words);
+    auto& known = s.module_cache[hash];
+    for (const auto& candidate : known) {
+        const auto old = candidate->Spirv();
+        if (old.size() == spirv.size() && std::equal(old.begin(), old.end(), spirv.begin())) {
+            s.modules[handle] = candidate;
+            return;
+        }
+    }
+    // Named by its SPIR-V: the MSL disk cache keys on this. The content cache also keeps its
+    // compiled variants alive after the Vulkan handle is destroyed or reused.
+    auto metal = std::make_shared<Metal::ShaderModule>(
+        std::vector<u32>(spirv.begin(), spirv.end()), hash);
+    known.push_back(metal);
+    s.modules[handle] = std::move(metal);
 }
 
 void Graphics(const Vulkan::GraphicsPipelineKey& key, std::span<const vk::ShaderModule> modules,
@@ -188,10 +204,9 @@ void Graphics(const Vulkan::GraphicsPipelineKey& key, std::span<const vk::Shader
     s.geometry += psos.geometry ? 1 : 0;
     {
         std::scoped_lock lock{s.pipelines_mutex};
-        s.graphics[VkPipeline(vk_pipeline)] = {.render = psos.render,
-                                               .tess = psos.tessellation,
-                                               .geometry = psos.geometry,
-                                               .rect_list = psos.rect_list};
+        s.graphics[VkPipeline(vk_pipeline)] = std::make_shared<GraphicsEntry>(GraphicsEntry{
+            .render = psos.render, .tess = psos.tessellation, .geometry = psos.geometry,
+            .rect_list = psos.rect_list});
     }
     s.Report();
     }
@@ -529,7 +544,7 @@ void GraphicsCreated(const VkGraphicsPipelineCreateInfo* info, VkPipeline pipeli
         generic_pipelines.push_back(std::move(entry));
     }
     std::scoped_lock lock{s.pipelines_mutex};
-    s.graphics[pipeline] = ge;
+    s.graphics[pipeline] = std::make_shared<GraphicsEntry>(std::move(ge));
     NoteGeneric(true, "");
 }
 
