@@ -24,6 +24,12 @@ project it is based on.
 
 Changes taken from other ports of bbport, with thanks:
 
+- [**Wooloomooloo2/bloodborne_mac_port**](https://github.com/Wooloomooloo2/bloodborne_mac_port)
+  (GPL-2.0-or-later, `0b50589`) and [**Huax-1839/bloodborne-macos**](https://github.com/Huax-1839/bloodborne-macos)
+  (GPL-2.0-or-later, `ee3120a`, through the former): the Metal backend's shader compiler, shader
+  rewrites, pipeline-state cache and Vulkan-to-Metal tables (`video_core/renderer_metal/`), the
+  pipeline-key split, the shared blend rules and the shadow check (docs/NATIVE_RENDERER.md).
+
 - [**Supermedo/bloodborne_pc**](https://github.com/Supermedo/bloodborne_pc/commit/79d44f0eecc2eed45c1e33b48996e53626adca48)
   (GPL-2.0-or-later, `79d44f0`, authored by Ambrose): the per-user trophy event persistence
   approach. Adapted here with a versioned title-aware protocol, checked file operations and
@@ -71,6 +77,7 @@ Changes taken from other ports of bbport, with thanks:
 - [FSR-Vulkan](https://github.com/FireBurn/FSR-Vulkan) by FireBurn and the AMD FidelityFX SDK (MIT)
 - [LibAtrac9](https://github.com/Thealexbarney/LibAtrac9) (MIT)
 - [Dear ImGui](https://github.com/ocornut/imgui) (MIT)
+- [SPIRV-Cross](https://github.com/KhronosGroup/SPIRV-Cross) (Apache-2.0), the Metal backend's shader conversion
 - [cpp-httplib](https://github.com/yhirose/cpp-httplib) by Yuji Hirose (MIT), in the online module
 - [half](https://half.sourceforge.net/) (MIT)
 - DejaVu fonts

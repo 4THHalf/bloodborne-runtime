@@ -32,6 +32,9 @@
 #include "video_core/renderer_vulkan/vk_pipeline_serialization.h"
 #include "video_core/renderer_vulkan/vk_scheduler.h"
 #include "video_core/renderer_vulkan/vk_shader_util.h"
+#ifdef BB_METAL_BACKEND
+#include "video_core/renderer_metal/mtl_shadow.h"
+#endif
 #include "video_core/buffer_cache/buffer.h"
 #include "video_core/buffer_cache/buffer_cache.h"
 #include "bbport_guest_memory.h"
@@ -617,6 +620,12 @@ const GraphicsPipeline* PipelineCache::GetGraphicsPipeline(const DrawIndirectPar
             auto pipeline = std::make_unique<GraphicsPipeline>(
                 instance, scheduler, desc_heap, profile, key, *pipeline_cache, infos,
                 runtime_infos, fetch, modules, sdata, false);
+#ifdef BB_METAL_BACKEND
+            Metal::Shadow::Graphics(
+                key, modules, infos, sdata,
+                runtime_infos[u32(Shader::SwStage::Fragment)].hw.fs.clip_distance_emulation &&
+                    !infos[u32(Shader::SwStage::Fragment)]);
+#endif
             std::scoped_lock lk{job->mutex};
             job->pipeline = std::move(pipeline);
             job->sdata = std::move(sdata);
@@ -636,6 +645,11 @@ const GraphicsPipeline* PipelineCache::GetGraphicsPipeline(const DrawIndirectPar
         it.value() = std::make_unique<GraphicsPipeline>(
             instance, scheduler, desc_heap, profile, sel.graphics_key, *pipeline_cache, sel.infos,
             sel.runtime_infos, sel.fetch_shader, sel.modules, sdata, false);
+#ifdef BB_METAL_BACKEND
+        Metal::Shadow::Graphics(sel.graphics_key, sel.modules, sel.infos, sdata,
+                                sel.runtime_infos[u32(Shader::SwStage::Fragment)].hw.fs.clip_distance_emulation &&
+                                    !sel.infos[u32(Shader::SwStage::Fragment)]);
+#endif
 
         if (!sel.graphics_key.fixed_quad_outer) {
             RegisterPipelineData(sel.graphics_key, pipeline_hash, sdata);
@@ -741,6 +755,9 @@ const ComputePipeline* PipelineCache::GetComputePipeline() {
         it.value() = std::make_unique<ComputePipeline>(instance, scheduler, desc_heap, profile,
                                                        *pipeline_cache, compute_key, *sel.infos[0],
                                                        sel.modules[0], sdata, false);
+#ifdef BB_METAL_BACKEND
+        Metal::Shadow::Compute(compute_key, sel.modules[0]);
+#endif
         RegisterPipelineData(compute_key, sdata);
         ++num_new_pipelines;
 
@@ -1336,6 +1353,9 @@ vk::ShaderModule PipelineCache::CompileModule(Shader::Info& info, Shader::Runtim
     } else {
         module = CompileSPV(spv, instance.GetDevice());
     }
+#ifdef BB_METAL_BACKEND
+    Metal::Shadow::NoteModule(module, is_patched ? std::span<const u32>{*patch} : std::span<const u32>{spv});
+#endif
 
     RegisterShaderBinary(std::move(spv), info.pgm_hash, perm_idx);
 

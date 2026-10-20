@@ -89,7 +89,7 @@ advance the renderer migration.
 | N2 · shaders ahead of time | 0% `░░░░░░░░░░░░░░░░░░░░` | Inventory shader variants |
 | N3 · textures as objects | 0% `░░░░░░░░░░░░░░░░░░░░` | Trace texture creation sites |
 | N4 · backend interface | 10% `██░░░░░░░░░░░░░░░░░░` | Paused: opening-video stability |
-| N5 · Metal backend | 0% `░░░░░░░░░░░░░░░░░░░░` | Implement the interface after N4 |
+| N5 · Metal backend | 10% `██░░░░░░░░░░░░░░░░░░` | Every pipeline builds in Metal (shadow); next: the present pass |
 | N6 · engine render boundary | 0% `░░░░░░░░░░░░░░░░░░░░` | Map engine calls after R4 |
 
 N1 decisions:
@@ -399,6 +399,37 @@ before this first code slice, and [the slice's Linux build passed at `16555ad`](
 
 Recording migration has not begun: 59 legacy lambda source sites remain and no escape opcode
 has been introduced. The remaining count must reach zero before N5.
+
+### Adapting the Wooloomooloo2 Metal renderer (2026-10-20)
+
+[Wooloomooloo2/bloodborne_mac_port](https://github.com/Wooloomooloo2/bloodborne_mac_port)
+(GPL-2.0-or-later) replaced MoltenVK with its own Metal renderer in its 0.5 releases, partly
+from [Huax-1839/bloodborne-macos](https://github.com/Huax-1839/bloodborne-macos). It reports
+1440p native at 82.0 FPS against 69.5 on MoltenVK (M4 Max). Its renderer is Metal only, so it is
+not merged; its backend pieces are adapted into ours where they fit the multiplatform design
+(one shared core, an adapter per graphics API). MoltenVK stays the default renderer and the
+fallback.
+
+Taken so far (from `0b50589`): the SPIR-V to MSL compiler (SPIRV-Cross, direct buffer, texture
+and sampler slots, no argument buffers), its shader rewrites (rect lists as two triangles,
+tessellation as compute kernels plus Metal's tessellator, geometry shaders as kernels), the
+Metal pipeline-state cache with a binary archive kept between sessions, and the Vulkan-to-Metal
+format and state tables: 28 files in `video_core/renderer_metal/`, built on macOS only.
+
+**Vocabulary.** As in the fork, the pipeline keys (`vk_pipeline_key.h`) keep Vulkan's enum values
+as plain data, shared by both backends; no Vulkan handle, instance or scheduler is in them. The
+blend rules (`AttachmentBlendState`) are shared. This narrows the N4 contract's rule that the core
+sees no `vk::` types: enums as data are allowed, handles and calls are not.
+
+**Shadow check.** `BB_METAL_SHADOW=1` builds every pipeline the Vulkan path creates as Metal
+pipeline states too, from the same key and SPIR-V (`mtl_shadow.cpp`), and logs the totals and each
+failure. Nothing is drawn with them. A 60-second copied-save run (Hunter's Dream, 1080p, FSR,
+with the cache warm-up) built 465 graphics pipelines (15 rect lists, 17 tessellated, no geometry
+shaders met) and 35 compute pipelines, with 0 failures, at 57.6 FPS.
+
+Next, in the fork's order and each behind a switch with MoltenVK as the fallback: the present
+pass through a Metal encoder, then the frame's commands, then resources; each measured against
+MoltenVK on our build.
 
 ### Upstream bbport merges
 

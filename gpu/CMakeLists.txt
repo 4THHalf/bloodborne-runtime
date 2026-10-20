@@ -115,6 +115,8 @@ add_custom_target(host_shaders DEPENDS ${SHADER_HEADERS})
 file(GLOB_RECURSE VIDEO_CORE CONFIGURE_DEPENDS shadps4/video_core/*.cpp)
 file(GLOB_RECURSE RECOMPILER CONFIGURE_DEPENDS shadps4/shader_recompiler/*.cpp)
 list(FILTER VIDEO_CORE EXCLUDE REGEX "renderdoc\\.cpp$")
+# The Metal backend (R5, docs/NATIVE_RENDERER.md) is macOS only; added below.
+list(FILTER VIDEO_CORE EXCLUDE REGEX "/renderer_metal/")
 set(COMMON
     shadps4/common/decoder.cpp shadps4/common/error.cpp
     shadps4/common/io_file.cpp shadps4/common/native_clock.cpp shadps4/common/number_utils.cpp
@@ -185,6 +187,28 @@ else()
     # TLS descriptor call (_dl_tlsdesc_return was ~2% of the draw recording thread).
     target_compile_options(bbgpu PRIVATE -ftls-model=initial-exec)
     target_link_options(bbgpu PRIVATE -Wl,--allow-shlib-undefined)
+endif()
+# The Metal backend (R5 N5, docs/NATIVE_RENDERER.md): SPIR-V to MSL through SPIRV-Cross, Metal
+# pipeline states built from the shared pipeline keys. Adapted from Wooloomooloo2/
+# bloodborne_mac_port (0b50589) and Huax-1839/bloodborne-macos (GPL-2.0-or-later). MoltenVK stays
+# the renderer; BB_METAL_SHADOW=1 only builds a Metal pipeline beside each Vulkan one.
+if (APPLE)
+    enable_language(OBJCXX)
+    find_package(spirv_cross_core CONFIG REQUIRED)
+    find_package(spirv_cross_glsl CONFIG REQUIRED)
+    find_package(spirv_cross_msl CONFIG REQUIRED)
+    file(GLOB METAL_SOURCES CONFIGURE_DEPENDS shadps4/video_core/renderer_metal/*.cpp
+         shadps4/video_core/renderer_metal/*.mm)
+    target_sources(bbgpu PRIVATE ${METAL_SOURCES})
+    foreach(source IN LISTS METAL_SOURCES)
+        if (source MATCHES "\\.mm$")
+            set_source_files_properties(${source} PROPERTIES COMPILE_OPTIONS
+                "-fobjc-arc;-UVK_USE_PLATFORM_METAL_EXT;-Wno-unguarded-availability-new")
+        endif()
+    endforeach()
+    target_link_libraries(bbgpu PRIVATE spirv-cross-msl spirv-cross-glsl spirv-cross-core
+        "-framework Metal" "-framework QuartzCore" "-framework Foundation")
+    target_compile_definitions(bbgpu PRIVATE BB_METAL_BACKEND=1)
 endif()
 target_link_libraries(bbgpu PRIVATE ffx-vulkan::portable ffx-vulkan::fsr4-v07-vulkan)
 target_link_libraries(bbgpu PUBLIC Vulkan::Headers fmt::fmt Boost::headers magic_enum::magic_enum

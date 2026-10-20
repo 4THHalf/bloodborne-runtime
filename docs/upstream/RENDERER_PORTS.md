@@ -127,3 +127,9 @@ Checks: `build.sh` and the runtime tests (unchanged pre-existing failures). Two 
 playtests (`batchA_lamps`, `batchA_play2`; lamp travel, fights) ran without a fault, assertion
 or any of the new fallbacks firing; the maintainer reported no regression. Blood decals drawn
 pale and an enemy's body drawn as colour noise were reported in these runs as older bugs.
+
+## macOS Metal renderer ports
+
+| Source | Change and decision | Verification |
+|---|---|---|
+| [Wooloomooloo2/bloodborne_mac_port `0b50589`](https://github.com/Wooloomooloo2/bloodborne_mac_port/tree/0b50589) (with Huax-1839/bloodborne-macos `ee3120a`) | Adapted the Metal backend's shader compiler, shader rewrites, pipeline-state cache and format tables into `renderer_metal/`; split the pipeline keys out and shared the blend rules. Their Metal-only renderer is not merged (ours stays multiplatform). | `build.sh --test` on macOS arm64. `BB_METAL_SHADOW=1` copied-save run: 465 graphics and 35 compute pipelines built in Metal, 0 failed, 57.6 FPS with MoltenVK drawing. |

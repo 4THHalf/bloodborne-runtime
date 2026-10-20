@@ -30,6 +30,9 @@ done
 
 VULKAN_VERSION=v1.4.365
 MOLTENVK_VERSION=v1.4.2
+# SPIR-V to Metal shading language for the Metal backend (R5); the tag Wooloomooloo2/bloodborne_mac_port
+# builds its Metal renderer with.
+SPIRV_CROSS_VERSION=vulkan-sdk-1.4.363.0
 SDL_VERSION=release-3.4.18
 FMT_VERSION=12.0.0
 MAGIC_ENUM_VERSION=v0.9.7
@@ -116,6 +119,10 @@ EOF
     mark moltenvk
 fi
 
+cmake_package spirv-cross "$(gh KhronosGroup/SPIRV-Cross $SPIRV_CROSS_VERSION)" \
+    -DSPIRV_CROSS_SHARED=OFF -DSPIRV_CROSS_STATIC=ON -DSPIRV_CROSS_CLI=OFF -DSPIRV_CROSS_ENABLE_TESTS=OFF \
+    -DSPIRV_CROSS_ENABLE_HLSL=OFF -DSPIRV_CROSS_ENABLE_CPP=OFF -DSPIRV_CROSS_ENABLE_REFLECT=OFF \
+    -DSPIRV_CROSS_ENABLE_C_API=OFF -DSPIRV_CROSS_ENABLE_UTIL=OFF
 cmake_package sdl3 "$(gh libsdl-org/SDL $SDL_VERSION)" -DSDL_SHARED=ON -DSDL_STATIC=OFF -DSDL_TESTS=OFF -DSDL_EXAMPLES=OFF
 cmake_package fmt "$(gh fmtlib/fmt $FMT_VERSION)" -DFMT_TEST=OFF -DFMT_DOC=OFF
 cmake_package magic-enum "$(gh Neargye/magic_enum $MAGIC_ENUM_VERSION)" \
