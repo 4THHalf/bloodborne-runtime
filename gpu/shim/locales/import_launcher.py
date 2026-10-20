@@ -21,11 +21,11 @@ PATHS = [
     "graphics.sharpen", "graphics.sharpness", "graphics.objectMotion", "graphics.objectMotionHint",
     "graphics.modelLod",
     "game.title", "game.extras", "game.skipIntro",
-    "advanced.title", "advanced.performance", "advanced.drawPipe", "advanced.readbacks", "advanced.preupload",
+    "advanced.title", "advanced.performance", "advanced.renderer", "advanced.rendererHint", "advanced.drawPipe", "advanced.readbacks", "advanced.preupload",
     "advanced.liveResolution", "advanced.liveResolutionHint", "advanced.diagnostics", "advanced.debugCamera",
     "advanced.debugCameraHint", "advanced.debugMenu", "advanced.debugMenuHint",
     "common.restartNote", "common.off",
-    "options.preset", "options.fps", "options.fpsSize", "options.fpsPosition", "options.lod", "options.present", "options.drawPipe",
+    "options.preset", "options.fps", "options.fpsSize", "options.fpsPosition", "options.lod", "options.present", "options.drawPipe", "options.renderer",
     "options.readbacks", "options.preupload", "options.live", "options.effects",
 ]
 

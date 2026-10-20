@@ -759,11 +759,24 @@ void AdvancedTab() {
     auto& s = BbSettings::Get();
     const bool launcher = BbSettings::LauncherChannel();
     if (BeginCard("##performance", LT("advanced.performance"))) {
+#ifdef __APPLE__
+        if (launcher) {
+            static const char* renderers[] = {"moltenvk", "metal"};
+            const char* renderer_names[] = {LT("options.renderer.moltenvk"), LT("options.renderer.metal")};
+            LauncherChoice(BbSettings::LauncherRenderer, LT("advanced.renderer"), renderers, renderer_names, 2,
+                           LT("advanced.rendererHint"), true);
+        }
+#endif
         if (launcher) {
             static const char* pipe[] = {"", "1", "0"};
             const char* pipe_names[] = {LT("options.drawPipe.auto"), LT("options.drawPipe.on"), LT("options.drawPipe.off")};
+#ifdef __APPLE__
+            constexpr bool first = false;
+#else
+            constexpr bool first = true;
+#endif
             LauncherChoice(BbSettings::LauncherDrawPipe, LT("advanced.drawPipe"), pipe, pipe_names, 3,
-                           LT("options.drawPipe.autoHint"), true);
+                           LT("options.drawPipe.autoHint"), first);
             static const char* readbacks[] = {"", "2", "0"};
             const char* readback_names[] = {LT("options.readbacks.relaxed"), LT("options.readbacks.precise"),
                                             LT("options.readbacks.off")};

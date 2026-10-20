@@ -144,7 +144,7 @@ bool LauncherChannel();
 /// of an in-game restart. Fullscreen applies at once, the others at the next start.
 enum LauncherKey : int { LauncherFullscreen, LauncherDisplay, LauncherPresentMode, LauncherFpsMode,
                          LauncherFpsLimit, LauncherMetalHud, LauncherDrawPipe, LauncherReadbacks,
-                         LauncherPreupload, LauncherKeyCount };
+                         LauncherPreupload, LauncherRenderer, LauncherKeyCount };
 std::string Launcher(LauncherKey key);
 /// The menu's change (sent to the launcher by the next Save).
 void SetLauncher(LauncherKey key, const std::string& value);
