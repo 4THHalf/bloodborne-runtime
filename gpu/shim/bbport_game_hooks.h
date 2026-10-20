@@ -14,4 +14,10 @@ void ApplyGameEffects();
 bool HotEffects();
 /// The output's aspect ratio: the camera, the HUD's markers and the UI follow it (16:9: the game's).
 void SetDisplayAspect(float aspect);
+/// Native mouse look: the turn is added at the camera's next update; false when the camera does
+/// not take turns now (lock-on, menus) or the hook is not in: drive the right stick then.
+bool CameraLookAvailable();
+bool CameraLookAdd(float pitch, float yaw);
+/// The free camera (the Restore Debug Camera patch) is on.
+bool FreeCameraActive();
 } // namespace BbGameHooks

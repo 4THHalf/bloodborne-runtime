@@ -7,12 +7,14 @@
 #include "bbport_effect_flags.h"
 #include "bbport_guest_code_hooks.h"
 #include "bbport_settings.h"
+#include "bloodborne_menu_pointer.h"
 #include "cpu/bbcpu.h"
 #include "platform.h"
 
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cmath>
@@ -603,6 +605,61 @@ bool InstallKernelSampleClamp() {
     static constexpr std::array<u8, 6> entry = {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57};
     return Hook(0xbbc3e0, entry, 0, KernelSampleClamp);
 }
+// ---- Native mouse look (bbport 0.6) ----
+// The follow camera's update (0x143ac60, rdi the camera) derives its angles from where the camera
+// is around the player each frame, pitch at +0x140 and yaw at +0x144; in its normal mode
+// 0x143cde0..0x143cdf0 makes xmm1 = camera stick * turn speed * frame time, the increment the game
+// adds to (pitch, yaw) before it wraps the yaw and clamps the pitch. After those instructions the
+// mouse's turn since the last update (radians, taken and cleared atomically) is added to it: the
+// mouse turns the camera as far as it moved, with none of the stick's dead zone, response curve,
+// acceleration or top speed. A turn counts as camera input, as the stick does (else the update
+// pulls the pitch back to its rest angle at once).
+constexpr std::array<u8, 16> LookSiteCode = {0xc5, 0xa8, 0x59, 0xc9,                         // vmulps xmm1, xmm10, xmm1
+                                             0xc5, 0xf8, 0x28, 0x95, 0x10, 0xfc, 0xff, 0xff, // vmovaps xmm2, [rbp - 0x3f0]
+                                             0xc5, 0xe8, 0x59, 0xc9};                        // vmulps xmm1, xmm2, xmm1
+std::atomic<u64> look_delta{0}; ///< (pitch, yaw) as two floats, taken by the hook
+std::atomic<bool> look_installed{false};
+std::atomic<long long> look_since_ms{0}; ///< when look_delta last went from empty to not
+
+void PS4_SYSV_ABI LookTurn(u64, const Core::GuestRegisterSnapshot* r) {
+    const u64 delta = look_delta.exchange(0, std::memory_order_acq_rel);
+    if (!delta) {
+        return;
+    }
+    *reinterpret_cast<std::uint32_t*>(r->rbp - 0x3c4) = 1;
+    *reinterpret_cast<u8*>(r->r13 + 0x15c) = 1;
+    *reinterpret_cast<std::uint32_t*>(r->r13 + 0x154) = 0;
+    float add[2], now[2];
+    std::memcpy(add, &delta, 8);
+    auto& xmm1 = const_cast<Core::GuestRegisterSnapshot*>(r)->ymm[1];
+    std::memcpy(now, xmm1.data(), 8);
+    now[0] += add[0];
+    now[1] += add[1];
+    std::memcpy(xmm1.data(), now, 8);
+}
+
+// The free camera (the community patch "Restore Debug Camera": hold Cross and press L3) keeps its
+// mode in the camera manager (r12 at its check 0x1de344c): byte +0xc4 is 1 while it is on. Only
+// installed where the patch is in place; the mouse then drives its right stick.
+std::atomic<u64> free_camera_manager{0};
+void PS4_SYSV_ABI FreeCameraProbe(u64, const Core::GuestRegisterSnapshot* r) {
+    free_camera_manager.store(r->r12, std::memory_order_relaxed);
+}
+
+void InstallMouseHooks() {
+    // BB_NATIVE_MOUSE=0: the mouse drives the right stick instead (runtime_pad.c).
+    if (const char* env = std::getenv("BB_NATIVE_MOUSE"); !(env && env[0] == '0')) {
+        look_installed = Core::InstallGuestCodeHookAfter(reinterpret_cast<void*>(image_base + 0x143cde0),
+                                                         LookSiteCode, 0, LookTurn);
+    }
+    static constexpr std::array<u8, 9> free_camera = {0x41, 0x80, 0xbc, 0x24, 0xc4, 0x00, 0x00, 0x00, 0x01};
+    const bool probe = std::memcmp(reinterpret_cast<const void*>(image_base + 0x1de344c), free_camera.data(),
+                                   free_camera.size()) == 0 &&
+                       Hook(0x1de344c, free_camera, 0, FreeCameraProbe);
+    std::printf("Game hooks: native mouse look %s; free camera probe %s\n",
+                look_installed ? "on (the mouse turns the camera itself)" : "off (the mouse drives the right stick)",
+                probe ? "on" : "off (no Restore Debug Camera patch)");
+}
 } // namespace
 
 void ApplyGameEffects() {
@@ -613,6 +670,62 @@ void ApplyGameEffects() {
 
 bool HotEffects() {
     return hot_effects.load(std::memory_order_relaxed);
+}
+
+bool FreeCameraActive() {
+    const u64 manager = free_camera_manager.load(std::memory_order_relaxed);
+    return manager != 0 && *reinterpret_cast<const volatile u8*>(manager + 0xc4) == 1;
+}
+
+bool CameraLookAvailable() {
+    return look_installed.load(std::memory_order_acquire);
+}
+
+bool CameraLookAdd(float pitch, float yaw) {
+    if (!CameraLookAvailable()) {
+        return false;
+    }
+    // Whether the camera takes the turns: a turn it has not taken for 100 ms (lock-on, menus,
+    // cutscenes: its normal update does not run) means not, until it takes one again. Meanwhile
+    // the caller drives the stick (lock-on switches targets with the stick) and the turn waiting
+    // here is replaced rather than applied all at once later.
+    static std::atomic<bool> active{true}, stored{false};
+    const long long now = std::chrono::duration_cast<std::chrono::milliseconds>(
+                              std::chrono::steady_clock::now().time_since_epoch())
+                              .count();
+    u64 old = look_delta.load(std::memory_order_acquire);
+    if (stored.load(std::memory_order_relaxed)) {
+        if (old == 0) {
+            active.store(true, std::memory_order_relaxed);
+        } else if (now - look_since_ms.load(std::memory_order_relaxed) > 100) {
+            active.store(false, std::memory_order_relaxed);
+        }
+    }
+    const bool taking = active.load(std::memory_order_relaxed);
+    if (pitch == 0.0f && yaw == 0.0f) {
+        return taking;
+    }
+    for (;;) {
+        float p = 0.0f, y = 0.0f;
+        if (old != 0 && taking) {
+            const std::uint32_t lo = std::uint32_t(old), hi = std::uint32_t(old >> 32);
+            std::memcpy(&p, &lo, 4);
+            std::memcpy(&y, &hi, 4);
+        }
+        p += pitch;
+        y += yaw;
+        std::uint32_t lo, hi;
+        std::memcpy(&lo, &p, 4);
+        std::memcpy(&hi, &y, 4);
+        const u64 next = u64(lo) | (u64(hi) << 32);
+        if (look_delta.compare_exchange_weak(old, next, std::memory_order_acq_rel)) {
+            if (old == 0 || !taking) {
+                look_since_ms.store(now, std::memory_order_relaxed);
+            }
+            stored.store(true, std::memory_order_relaxed);
+            return taking;
+        }
+    }
 }
 
 void SetDisplayAspect(float aspect) {
@@ -660,6 +773,8 @@ void PatchImage(unsigned char* image, std::uint64_t) {
                 InstallHotEffects() ? "switched live" : "at start (patches)",
                 InstallKernelSampleClamp() ? "on" : "not installed");
     const int camera = InstallCameraAspectHooks(), markers = InstallMarkerHooks();
+    InstallMouseHooks();
+    BbMenuPointer::Install();
     const bool ui = InstallUiHooks();
     std::printf("Game hooks: the output's aspect ratio: the camera at %d of %zu places, the HUD's "
                 "markers at %d of %zu, the UI %s\n", camera, CameraParamStores.size(), markers,

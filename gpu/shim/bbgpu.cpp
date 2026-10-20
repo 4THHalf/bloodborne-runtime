@@ -355,6 +355,23 @@ extern "C" int bbgpu_handle_fault(void* ucontext, void* address) {
     return BbFreeCheck::OnStaleTrapFault(reinterpret_cast<std::uint64_t>(address)) ? 1 : 0;
 }
 
+extern "C" void bbgpu_mouse_capture(void) {
+    if (g_window) {
+        g_window->RequestMouseCapture();
+    }
+}
+
+extern "C" int bbgpu_free_camera(void) {
+    return BbGameHooks::FreeCameraActive() ? 1 : 0;
+}
+
+extern "C" int bbgpu_camera_look(float yaw, float pitch) {
+    if (!BbGameHooks::CameraLookAvailable()) {
+        return 0;
+    }
+    return BbGameHooks::CameraLookAdd(pitch, yaw) ? 1 : 0;
+}
+
 extern "C" void bbgpu_patch_image(unsigned char* image, uint64_t size) {
     BbGnmHooks::PatchImage(image, size);
     BbGameMenu::PatchImage(image, size);

@@ -17,7 +17,10 @@ project it is based on.
   rate through hooks (`bbport_frame_rate.cpp`, `bbport_guest_code.h`), the game-code hook
   interface (`bbport_guest_code_hooks.h`, after shadPS4's InstallGuestCodeHook in the
   shadp2p/BBSC forks), Laurence's cinematic fixes, the live effects and the SSAO check
-  (`bbport_game_hooks.cpp`, `bbport_effect_flags.h`).
+  (`bbport_game_hooks.cpp`, `bbport_effect_flags.h`), aspect ratios (camera, markers, UI viewport
+  and HUD hooks, the UI edge stretch), the keyboard and mouse (`runtime_pad.c` and `window.cpp`
+  merged from 0.6, `bbport_cursor.cpp`, native mouse look) and the menu pointer
+  (`gpu/games/bloodborne_menu_pointer.cpp`; its findings first published in a fork of bbport).
 - [**shadPS4**](https://github.com/shadps4-emu/shadPS4): the video core and shader recompiler
   (GPL-2.0+), and [sirit](https://github.com/shadps4-emu/sirit).
 - **shadp2p** (a shadPS4 fork, GPL-2.0): the network and PSN libraries of the online module
