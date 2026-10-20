@@ -1010,6 +1010,23 @@ void Menu() {
     }
 }
 
+// The CPU layer (bloodborne-recomp, linked into bb-probe): weak, so tests without it still load.
+extern "C" __attribute__((weak)) size_t bbcpu_recomp_functions(void);
+extern "C" __attribute__((weak)) int bbcpu_enabled(void);
+
+/// What runs the game's code: the recompiled library, the translator (x86-64 to arm64 as it runs),
+/// the interpreter, or the CPU itself (x86-64 builds without bbcpu).
+const char* CpuName() {
+    if (bbcpu_recomp_functions && bbcpu_recomp_functions() > 0) {
+        return "Recompiled";
+    }
+    if (bbcpu_enabled && !bbcpu_enabled()) {
+        return "x86-64 native";
+    }
+    const char* jit = std::getenv("BB_JIT");
+    return jit && jit[0] == '0' ? "Interpreter" : "Translator";
+}
+
 /// What draws the frame: the Metal backend's frame path (BB_METAL_FRAME=1), MoltenVK, or Vulkan.
 const char* RendererName() {
 #ifdef BB_METAL_BACKEND
@@ -1022,8 +1039,9 @@ const char* RendererName() {
 }
 
 /// The FPS counter, where the player put it. Small: the frame rate, colored by how healthy it is,
-/// and the frame time on one line. Big: also the upscaler and resolutions, and a graph of the
-/// last frame times (stutters stand out). Fixed widths, so it never moves as the numbers change.
+/// and the frame time on one line. Big: also what runs the game (GPU and CPU path), the upscaler
+/// and resolutions, and a graph of the last frame times (stutters stand out). Fixed widths, so it
+/// never moves as the numbers change.
 void FpsCounter() {
     const auto& s = BbSettings::Get();
     const ImGuiViewport* viewport = ImGui::GetMainViewport();
@@ -1068,11 +1086,7 @@ void FpsCounter() {
     if (big) {
         ImGui::AlignTextToFramePadding();
     }
-    if (big) {
-        ImGui::Text("FPS  %.1f ms  %s", frame_ms_avg, RendererName());
-    } else {
-        ImGui::Text("FPS  %.1f ms", frame_ms_avg);
-    }
+    ImGui::Text("FPS  %.1f ms", frame_ms_avg);
     if (!big) {
         ImGui::PopStyleColor();
         ImGui::End();
@@ -1086,6 +1100,8 @@ void FpsCounter() {
                            : s.upscaler == BbSettings::UpscalerDlss   ? "DLSS"
                                                                       : nullptr;
     const int output = s.output_res;
+    // What runs it: the GPU path and the CPU path.
+    ImGui::Text("%s  ·  %s", RendererName(), CpuName());
     if (upscaler) {
         ImGui::Text("%s  %d x %d > %d x %d", upscaler, s.active_render_width.load(), s.active_render_height.load(),
                     BbSettings::OutputWidths[output], BbSettings::OutputHeights[output]);

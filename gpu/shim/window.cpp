@@ -212,7 +212,15 @@ bool WindowSDL::PollEvents() {
             located=SDL_GetDisplayBounds(SDL_GetDisplayForWindow(window),&rect);
             x=rect.x; y=rect.y; w=rect.w; h=rect.h;
         }
-        const bool visible=located && window_info.type != WindowSystemType::Wayland && (flags & SDL_WINDOW_INPUT_FOCUS) &&
+#ifdef __APPLE__
+        // macOS: the helper shows a notice only while the game's window is the front window
+        // (bloodborne-launcher's bloodborne-overlay); SDL's input focus came late, or stayed set
+        // while another app was in front of a fullscreen game, so it is not required here.
+        const bool focused=true;
+#else
+        const bool focused=(flags & SDL_WINDOW_INPUT_FOCUS)!=0;
+#endif
+        const bool visible=located && window_info.type != WindowSystemType::Wayland && focused &&
             !(flags & (SDL_WINDOW_HIDDEN | SDL_WINDOW_MINIMIZED));
         notification_window_callback(x,y,w,h,visible);
     }
