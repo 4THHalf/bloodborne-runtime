@@ -39,6 +39,7 @@
   "effects.effect_game_aa": "Pelin oma reunanpehmennys",
   "effects.effect_dynamic_shadows": "Dynaamisten valojen varjot",
   "effects.effect_ssr": "SSR-heijastukset (eivät alkuperäisessä pelissä)",
+  "effects.effect_bloom": "Bloom (hehku)",
   "dlss.hint": "NVIDIA DLSS Super Resolution (RTX-näytönohjaimet; Native AA on DLAA). Vaatii DLSS-sillan ja NVIDIAn kirjaston pelin vieressä; muuten käytetään FSR 3.1:tä.",
   "hints.back": "Takaisin",
   "hints.close": "Sulje",
@@ -160,5 +161,6 @@
   "launcher.options.effects.effect_game_aa": "Pelin oma reunanpehmennys",
   "launcher.options.effects.effect_dynamic_shadows": "Dynaamisten valojen varjot",
   "launcher.options.effects.effect_ssr": "Ruutuavaruuden heijastukset",
-  "launcher.options.effects.effect_ssrHint": "Ei alkuperäisessä pelissä"
+  "launcher.options.effects.effect_ssrHint": "Ei alkuperäisessä pelissä",
+  "launcher.options.effects.effect_bloom": "Bloom (hehku)"
 }

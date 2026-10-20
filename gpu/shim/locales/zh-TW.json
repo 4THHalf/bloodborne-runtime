@@ -39,6 +39,7 @@
   "effects.effect_game_aa": "遊戲內建的反鋸齒",
   "effects.effect_dynamic_shadows": "動態光源陰影",
   "effects.effect_ssr": "SSR 反射（原版遊戲沒有）",
+  "effects.effect_bloom": "泛光 (Bloom)",
   "dlss.hint": "NVIDIA DLSS Super Resolution（RTX 顯示卡；Native AA 即 DLAA）。需要在遊戲旁放置 DLSS 橋接與 NVIDIA 的程式庫；否則使用 FSR 3.1。",
   "hints.back": "返回",
   "hints.close": "關閉",
@@ -160,5 +161,6 @@
   "launcher.options.effects.effect_game_aa": "遊戲內建反鋸齒",
   "launcher.options.effects.effect_dynamic_shadows": "動態光源陰影",
   "launcher.options.effects.effect_ssr": "螢幕空間反射",
-  "launcher.options.effects.effect_ssrHint": "原版遊戲中沒有"
+  "launcher.options.effects.effect_ssrHint": "原版遊戲中沒有",
+  "launcher.options.effects.effect_bloom": "泛光 (Bloom)"
 }

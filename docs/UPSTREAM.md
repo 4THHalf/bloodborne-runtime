@@ -27,7 +27,7 @@ The compatibility level imported from bbport is **0.51**, plus the 0.6 items bel
 | Frame rate through hooks, live limit, F3 for 30 FPS | Ported (`bbport_frame_rate.cpp`) |
 | Game-code hooks (`InstallGuestCodeHook`) | Ported as an interface; our implementation runs its stubs in bbcpu |
 | Laurence's cinematic above 30 FPS (job slots, 512 MiB render cache) | Ported (`bbport_game_hooks.cpp`) |
-| Effects switched live, SSAO only where the game has its target, SSR at start | Ported; Bloom not yet (a new setting) |
+| Effects switched live (with bloom, a new setting), SSAO only where the game has its target, SSR at start | Ported |
 | Aspect ratios through hooks (camera, HUD, markers); keyboard and mouse (mouse camera, menu pointer, Dark Souls III layout, button prompts) | Planned |
 | Online on shadPS4 0.20's network code (Seamless Hunt with BBSC co-op, The Hunter's Dream) | Planned |
 | The new memory model, NVIDIA/Intel/VRAM fixes, FSR 4.1.1, Steam Deck, AppImage | Not applicable (unified memory, Apple GPUs, macOS) |

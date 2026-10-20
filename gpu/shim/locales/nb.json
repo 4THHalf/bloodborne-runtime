@@ -39,6 +39,7 @@
   "effects.effect_game_aa": "Spillets egen kantutjevning",
   "effects.effect_dynamic_shadows": "Skygger fra dynamisk lys",
   "effects.effect_ssr": "SSR-refleksjoner (finnes ikke i originalspillet)",
+  "effects.effect_bloom": "Bloom (glød)",
   "dlss.hint": "NVIDIA DLSS Super Resolution (RTX-skjermkort; Native AA er DLAA). Krever DLSS-broen og NVIDIAs bibliotek ved siden av spillet; ellers brukes FSR 3.1.",
   "hints.back": "Tilbake",
   "hints.close": "Lukk",
@@ -160,5 +161,6 @@
   "launcher.options.effects.effect_game_aa": "Spillets egen kantutjevning",
   "launcher.options.effects.effect_dynamic_shadows": "Skygger fra dynamisk lys",
   "launcher.options.effects.effect_ssr": "Skjermromsrefleksjoner",
-  "launcher.options.effects.effect_ssrHint": "Fantes ikke i originalspillet"
+  "launcher.options.effects.effect_ssrHint": "Fantes ikke i originalspillet",
+  "launcher.options.effects.effect_bloom": "Bloom (glød)"
 }

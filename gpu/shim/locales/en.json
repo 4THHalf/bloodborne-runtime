@@ -39,6 +39,7 @@
   "effects.effect_game_aa": "The game's own anti-aliasing",
   "effects.effect_dynamic_shadows": "Dynamic light shadows",
   "effects.effect_ssr": "SSR reflections (not in the original game)",
+  "effects.effect_bloom": "Bloom",
   "dlss.hint": "NVIDIA DLSS Super Resolution (RTX GPUs; Native AA is DLAA). Needs the DLSS bridge and NVIDIA's library next to the game; otherwise FSR 3.1 is used.",
   "menu.heading": "Settings",
   "tab.debugViews": "Debug views",
@@ -160,5 +161,6 @@
   "launcher.options.effects.effect_game_aa": "The game's own anti-aliasing",
   "launcher.options.effects.effect_dynamic_shadows": "Shadows from dynamic lights",
   "launcher.options.effects.effect_ssr": "Screen-space reflections",
-  "launcher.options.effects.effect_ssrHint": "Not in the original game"
+  "launcher.options.effects.effect_ssrHint": "Not in the original game",
+  "launcher.options.effects.effect_bloom": "Bloom"
 }

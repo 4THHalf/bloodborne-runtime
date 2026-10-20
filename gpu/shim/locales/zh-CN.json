@@ -39,6 +39,7 @@
   "effects.effect_game_aa": "游戏自带的抗锯齿",
   "effects.effect_dynamic_shadows": "动态光源阴影",
   "effects.effect_ssr": "SSR 反射（原版游戏没有）",
+  "effects.effect_bloom": "泛光 (Bloom)",
   "dlss.hint": "NVIDIA DLSS Super Resolution（RTX 显卡；Native AA 即 DLAA）。需要在游戏旁放置 DLSS 桥接和 NVIDIA 的库；否则使用 FSR 3.1。",
   "hints.back": "返回",
   "hints.close": "关闭",
@@ -160,5 +161,6 @@
   "launcher.options.effects.effect_game_aa": "游戏自带抗锯齿",
   "launcher.options.effects.effect_dynamic_shadows": "动态光源阴影",
   "launcher.options.effects.effect_ssr": "屏幕空间反射",
-  "launcher.options.effects.effect_ssrHint": "原版游戏中没有"
+  "launcher.options.effects.effect_ssrHint": "原版游戏中没有",
+  "launcher.options.effects.effect_bloom": "泛光 (Bloom)"
 }

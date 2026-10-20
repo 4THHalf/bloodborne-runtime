@@ -39,6 +39,7 @@
   "effects.effect_game_aa": "Собственное сглаживание игры",
   "effects.effect_dynamic_shadows": "Тени от динамических источников",
   "effects.effect_ssr": "Отражения SSR (не было в игре)",
+  "effects.effect_bloom": "Свечение (Bloom)",
   "dlss.hint": "NVIDIA DLSS Super Resolution (видеокарты RTX; Native AA — это DLAA). Нужны мост DLSS и библиотека NVIDIA рядом с игрой; без них используется FSR 3.1.",
   "hints.back": "Назад",
   "hints.close": "Закрыть",
@@ -160,5 +161,6 @@
   "launcher.options.effects.effect_game_aa": "Собственное сглаживание игры",
   "launcher.options.effects.effect_dynamic_shadows": "Тени от динамических источников",
   "launcher.options.effects.effect_ssr": "Отражения в экранном пространстве",
-  "launcher.options.effects.effect_ssrHint": "Не было в оригинальной игре"
+  "launcher.options.effects.effect_ssrHint": "Не было в оригинальной игре",
+  "launcher.options.effects.effect_bloom": "Свечение (Bloom)"
 }

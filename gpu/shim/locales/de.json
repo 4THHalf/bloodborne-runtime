@@ -39,6 +39,7 @@
   "effects.effect_game_aa": "Anti-Aliasing des Spiels",
   "effects.effect_dynamic_shadows": "Schatten dynamischer Lichter",
   "effects.effect_ssr": "SSR-Spiegelungen (nicht im Originalspiel)",
+  "effects.effect_bloom": "Bloom (Überstrahlung)",
   "dlss.hint": "NVIDIA DLSS Super Resolution (RTX-Grafikkarten; Native AA ist DLAA). Benötigt die DLSS-Brücke und NVIDIAs Bibliothek neben dem Spiel; sonst wird FSR 3.1 verwendet.",
   "hints.back": "Zurück",
   "hints.close": "Schließen",
@@ -160,5 +161,6 @@
   "launcher.options.effects.effect_game_aa": "Kantenglättung des Spiels",
   "launcher.options.effects.effect_dynamic_shadows": "Schatten dynamischer Lichter",
   "launcher.options.effects.effect_ssr": "Bildschirmraum-Reflexionen",
-  "launcher.options.effects.effect_ssrHint": "Nicht im Originalspiel"
+  "launcher.options.effects.effect_ssrHint": "Nicht im Originalspiel",
+  "launcher.options.effects.effect_bloom": "Bloom (Überstrahlung)"
 }

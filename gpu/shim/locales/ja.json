@@ -39,6 +39,7 @@
   "effects.effect_game_aa": "ゲーム本来のアンチエイリアス",
   "effects.effect_dynamic_shadows": "動的ライトの影",
   "effects.effect_ssr": "SSR 反射（オリジナルのゲームにはない）",
+  "effects.effect_bloom": "ブルーム",
   "dlss.hint": "NVIDIA DLSS Super Resolution（RTX GPU。Native AA は DLAA）。ゲームの横に DLSS ブリッジと NVIDIA のライブラリが必要です。ない場合は FSR 3.1 を使用します。",
   "hints.back": "戻る",
   "hints.close": "閉じる",
@@ -160,5 +161,6 @@
   "launcher.options.effects.effect_game_aa": "ゲーム本来のアンチエイリアス",
   "launcher.options.effects.effect_dynamic_shadows": "動的ライトの影",
   "launcher.options.effects.effect_ssr": "スクリーンスペース反射",
-  "launcher.options.effects.effect_ssrHint": "オリジナルのゲームにはない機能"
+  "launcher.options.effects.effect_ssrHint": "オリジナルのゲームにはない機能",
+  "launcher.options.effects.effect_bloom": "ブルーム"
 }

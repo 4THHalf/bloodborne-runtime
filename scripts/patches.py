@@ -45,6 +45,7 @@ EFFECTS={
     'effect_game_aa':('Disable AA',None),
     'effect_dynamic_shadows':('Disable Dynamic Light Shadows (perf increase)',None),
     'effect_ssr':(None,'Enable Screen Space Reflections (READ NOTE)'),
+    'effect_bloom':('Disable Bloom',None),
     'skip_intro':(None,'Skip Intro'),
     'debug_camera':(None,'Restore Debug Camera'),
     'debug_menu':(None,'Restore Debug Menu (READ NOTES)'),
@@ -158,7 +159,7 @@ def validate_patch_requirements(names, game):
 # BB_HOT_EFFECTS=0 or BB_GAME_HOOKS=0: the patches at start, as before. Screen-space reflections
 # also size a target in the renderer's constructor: always the complete patch at start.
 HOT_EFFECTS={'effect_chromatic_aberration','effect_dof','effect_motion_blur','effect_ssao',
-             'effect_game_aa','effect_dynamic_shadows'}
+             'effect_game_aa','effect_dynamic_shadows','effect_bloom'}
 
 
 def effect_patches(settings, env=os.environ):

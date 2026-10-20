@@ -39,6 +39,7 @@
   "effects.effect_game_aa": "게임 자체 안티에일리어싱",
   "effects.effect_dynamic_shadows": "동적 조명 그림자",
   "effects.effect_ssr": "SSR 반사 (원래 게임에는 없음)",
+  "effects.effect_bloom": "블룸",
   "dlss.hint": "NVIDIA DLSS Super Resolution(RTX GPU, Native AA는 DLAA). 게임 옆에 DLSS 브리지와 NVIDIA 라이브러리가 필요하며, 없으면 FSR 3.1을 사용합니다.",
   "hints.back": "뒤로",
   "hints.close": "닫기",
@@ -160,5 +161,6 @@
   "launcher.options.effects.effect_game_aa": "게임 자체 안티에일리어싱",
   "launcher.options.effects.effect_dynamic_shadows": "동적 조명의 그림자",
   "launcher.options.effects.effect_ssr": "화면 공간 반사",
-  "launcher.options.effects.effect_ssrHint": "원작 게임에는 없던 효과"
+  "launcher.options.effects.effect_ssrHint": "원작 게임에는 없던 효과",
+  "launcher.options.effects.effect_bloom": "블룸"
 }

@@ -44,15 +44,16 @@ inline constexpr Effect Effects[] = {
     {"effect_game_aa", "Game's own anti-aliasing", "Собственное сглаживание игры", true},
     {"effect_dynamic_shadows", "Shadows from dynamic lights", "Тени от динамических источников", true},
     {"effect_ssr", "Screen-space reflections (not in original game)", "Отражения SSR (не было в игре)", false},
+    {"effect_bloom", "Bloom", "Свечение (Bloom)", true},
     {"skip_intro", "Skip startup intros", "Пропуск заставок при запуске", false},
     {"debug_camera", "Free camera (Cross + L3)", "Свободная камера (Cross + L3)", false},
     {"debug_menu", "Debug menu (requires font files)", "Debug menu (нужны файлы шрифтов)", false},
 };
 inline constexpr int EffectCount = int(sizeof(Effects) / sizeof(Effects[0]));
 /// The game's look (the launcher's Effects section) comes first; then the other start options.
-enum EffectIndex : int { EffectSsr = 6, GameEffectCount = 7, EffectSkipIntro = 7, EffectDebugCamera = 8,
-                         EffectDebugMenu = 9 };
-static_assert(EffectCount == 10);
+enum EffectIndex : int { EffectSsr = 6, EffectBloom = 7, GameEffectCount = 8, EffectSkipIntro = 8,
+                         EffectDebugCamera = 9, EffectDebugMenu = 10 };
+static_assert(EffectCount == 11);
 /// Live output resolutions: the upscaler's output and the UI host targets.
 inline constexpr int OutputWidths[] = {1280, 1920, 2560, 3840};
 inline constexpr int OutputHeights[] = {720, 1080, 1440, 2160};

@@ -39,6 +39,7 @@
   "effects.effect_game_aa": "Anticrénelage du jeu",
   "effects.effect_dynamic_shadows": "Ombres des lumières dynamiques",
   "effects.effect_ssr": "Réflexions SSR (absentes du jeu d’origine)",
+  "effects.effect_bloom": "Bloom (halo lumineux)",
   "dlss.hint": "NVIDIA DLSS Super Resolution (GPU RTX ; Native AA correspond au DLAA). Nécessite le pont DLSS et la bibliothèque NVIDIA à côté du jeu ; sinon FSR 3.1 est utilisé.",
   "hints.back": "Retour",
   "hints.close": "Fermer",
@@ -160,5 +161,6 @@
   "launcher.options.effects.effect_game_aa": "Anticrénelage du jeu",
   "launcher.options.effects.effect_dynamic_shadows": "Ombres des lumières dynamiques",
   "launcher.options.effects.effect_ssr": "Réflexions en espace écran",
-  "launcher.options.effects.effect_ssrHint": "Absent du jeu original"
+  "launcher.options.effects.effect_ssrHint": "Absent du jeu original",
+  "launcher.options.effects.effect_bloom": "Bloom (halo lumineux)"
 }

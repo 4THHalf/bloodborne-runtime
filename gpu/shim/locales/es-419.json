@@ -39,6 +39,7 @@
   "effects.effect_game_aa": "Antialiasing propio del juego",
   "effects.effect_dynamic_shadows": "Sombras de luces dinámicas",
   "effects.effect_ssr": "Reflejos SSR (no están en el juego original)",
+  "effects.effect_bloom": "Bloom (resplandor)",
   "dlss.hint": "NVIDIA DLSS Super Resolution (GPU RTX; Native AA es DLAA). Requiere el puente DLSS y la biblioteca de NVIDIA junto al juego; si no, se usa FSR 3.1.",
   "hints.back": "Atrás",
   "hints.close": "Cerrar",
@@ -160,5 +161,6 @@
   "launcher.options.effects.effect_game_aa": "Antialiasing propio del juego",
   "launcher.options.effects.effect_dynamic_shadows": "Sombras de luces dinámicas",
   "launcher.options.effects.effect_ssr": "Reflejos en espacio de pantalla",
-  "launcher.options.effects.effect_ssrHint": "No estaba en el juego original"
+  "launcher.options.effects.effect_ssrHint": "No estaba en el juego original",
+  "launcher.options.effects.effect_bloom": "Bloom (resplandor)"
 }

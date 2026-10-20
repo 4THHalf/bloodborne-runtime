@@ -39,6 +39,7 @@
   "effects.effect_game_aa": "Oyunun kendi kenar yumuşatması",
   "effects.effect_dynamic_shadows": "Dinamik ışık gölgeleri",
   "effects.effect_ssr": "SSR yansımaları (orijinal oyunda yok)",
+  "effects.effect_bloom": "Bloom (ışıma)",
   "dlss.hint": "NVIDIA DLSS Super Resolution (RTX GPU'lar; Native AA, DLAA'dır). Oyunun yanında DLSS köprüsü ve NVIDIA kitaplığı gerekir; aksi halde FSR 3.1 kullanılır.",
   "hints.back": "Geri",
   "hints.close": "Kapat",
@@ -160,5 +161,6 @@
   "launcher.options.effects.effect_game_aa": "Oyunun kendi kenar yumuşatması",
   "launcher.options.effects.effect_dynamic_shadows": "Dinamik ışık gölgeleri",
   "launcher.options.effects.effect_ssr": "Ekran alanı yansımaları",
-  "launcher.options.effects.effect_ssrHint": "Orijinal oyunda yoktu"
+  "launcher.options.effects.effect_ssrHint": "Orijinal oyunda yoktu",
+  "launcher.options.effects.effect_bloom": "Bloom (ışıma)"
 }

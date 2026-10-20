@@ -48,13 +48,17 @@ done
 sleep "${TITLE_WAIT:-6}"
 tools/press.sh cross; sleep "${PRESS_GAP:-6}"; tools/press.sh cross
 echo 'title input complete'
-# Level: a scene with many draws.
+# Level: two frame-stat windows in a row with more than LEVEL_DRAWS draws a frame (the title and
+# loading screens draw under 50; the Hunter's Dream about 540, Central Yharnam about 1,270). The
+# old threshold of 600 missed the Hunter's Dream, so runs there sat out the whole LEVEL_WAIT.
 start=$(date +%s)
 for i in $(seq 1 $(( ${LEVEL_WAIT:-240} / 2 ))); do
     sleep 2
     require_alive "while loading"
-    last=$(grep '^Frame stats' "$base.log" | tail -1 | sed -E 's/.* ([0-9]+) draws\/frame.*/\1/')
-    [[ -n $last && $last =~ ^[0-9]+$ && $last -gt 600 ]] && break
+    read -r prev last < <(grep '^Frame stats' "$base.log" | tail -2 |
+        sed -E 's/.* ([0-9]+) draws\/frame.*/\1/' | tr '\n' ' ')
+    [[ $prev =~ ^[0-9]+$ && $last =~ ^[0-9]+$ && $prev -gt ${LEVEL_DRAWS:-200} &&
+       $last -gt ${LEVEL_DRAWS:-200} ]] && break
 done
 echo "level after $(( $(date +%s) - start )) s"
 mark=$(grep -c '^Frame stats' "$base.log")

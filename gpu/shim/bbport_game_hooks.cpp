@@ -146,9 +146,9 @@ bool InstallResourceCacheSize() {
 // lights are bytes of the renderer's options (+0x2968, +0x2969, +0x296a, +0x296e; the patches
 // change the immediates that set them in the constructor). The renderer tests them while it builds
 // each frame. The constructor's tail (0x22c254c) reports the options' address; they are written
-// there and on every change. Chromatic aberration (0x229faa8) and depth of field (0x21d7bbc) are
-// code the patches replace: written back and forth here; the game's own bytes are kept as they
-// were found. Screen-space reflections stay a patch at start (it also sizes a target in the
+// there and on every change. Chromatic aberration (0x229faa8), depth of field (0x21d7bbc) and
+// bloom (0x21d72f0) are code the patches replace: written back and forth here; the game's own
+// bytes are kept as they were found. Screen-space reflections stay a patch at start (it also sizes a target in the
 // constructor). BB_HOT_EFFECTS=0: the patches at start, as before (patches.py).
 constexpr std::size_t MaxEffectObjects = 64;
 std::array<std::atomic<u64>, MaxEffectObjects> effects_objects{};
@@ -163,9 +163,10 @@ struct HotCode {
     std::array<u8, 12> original{};
     bool ready = false;
 };
-std::array<HotCode, 2> hot_code = {{
+std::array<HotCode, 3> hot_code = {{
     {0, 0x229faa8, {0xc7, 0x83, 0xac, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x90, 0x90}, 12},
     {1, 0x21d7bbc, {0xe9, 0xdf, 0x00, 0x00, 0x00, 0x90}, 6},
+    {7, 0x21d72f0, {0x31, 0xf6, 0x0f, 0x1f, 0x40, 0x00}, 6}, // bloom ("Disable Bloom", Kyo)
 }};
 struct HotFlag {
     int effect;

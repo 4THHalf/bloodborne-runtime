@@ -39,6 +39,7 @@
   "effects.effect_game_aa": "Własny antyaliasing gry",
   "effects.effect_dynamic_shadows": "Cienie od dynamicznych świateł",
   "effects.effect_ssr": "Odbicia SSR (nie ma ich w oryginalnej grze)",
+  "effects.effect_bloom": "Bloom (poświata)",
   "dlss.hint": "NVIDIA DLSS Super Resolution (karty RTX; Native AA to DLAA). Wymaga mostka DLSS i biblioteki NVIDIA obok gry; w przeciwnym razie używany jest FSR 3.1.",
   "hints.back": "Wstecz",
   "hints.close": "Zamknij",
@@ -160,5 +161,6 @@
   "launcher.options.effects.effect_game_aa": "Wygładzanie krawędzi gry",
   "launcher.options.effects.effect_dynamic_shadows": "Cienie od dynamicznych świateł",
   "launcher.options.effects.effect_ssr": "Odbicia w przestrzeni ekranu",
-  "launcher.options.effects.effect_ssrHint": "Nie było w oryginalnej grze"
+  "launcher.options.effects.effect_ssrHint": "Nie było w oryginalnej grze",
+  "launcher.options.effects.effect_bloom": "Bloom (poświata)"
 }

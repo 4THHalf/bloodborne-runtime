@@ -69,8 +69,8 @@ Tests use English (`BB_LANGUAGE=1 BB_UI_LANGUAGE=en`; the test scripts set it). 
 a time (`pgrep -x bb-probe` first). Test windows open on the screen.
 
 - `tools/test_run.sh NAME [VAR=VALUE...]`: a background run with a **copy** of the player's save
-  (the real one is never written). It boots, loads the save, holds in the level (`HOLD=45`
-  seconds) and prints the frame summary and any fault. `SAVE_FROM=DIR` starts from a launcher
+  (the real one is never written). It boots, loads the save, waits for the level (two frame-stat
+  windows above `LEVEL_DRAWS=200` draws a frame), holds there (`HOLD=45` seconds) and prints the frame summary and any fault. `SAVE_FROM=DIR` starts from a launcher
   backup instead; `KEEP_SAVE=1` keeps the previous test's progress. The test copy of the
   settings is `out/test-user/bbport.ini` (keep `show_fps=1` and `fps_size=big` there).
 - `tools/test_opening_video.sh NAME`: a new save in a fresh folder, through the opening video to

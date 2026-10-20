@@ -39,6 +39,7 @@
   "effects.effect_game_aa": "Spelets egen kantutjämning",
   "effects.effect_dynamic_shadows": "Skuggor från dynamiska ljus",
   "effects.effect_ssr": "SSR-reflektioner (finns inte i originalspelet)",
+  "effects.effect_bloom": "Bloom (glöd)",
   "dlss.hint": "NVIDIA DLSS Super Resolution (RTX-grafikkort; Native AA är DLAA). Kräver DLSS-bryggan och NVIDIAs bibliotek bredvid spelet; annars används FSR 3.1.",
   "hints.back": "Tillbaka",
   "hints.close": "Stäng",
@@ -160,5 +161,6 @@
   "launcher.options.effects.effect_game_aa": "Spelets egen kantutjämning",
   "launcher.options.effects.effect_dynamic_shadows": "Skuggor från dynamiska ljus",
   "launcher.options.effects.effect_ssr": "Skärmrymdsreflektioner",
-  "launcher.options.effects.effect_ssrHint": "Fanns inte i originalspelet"
+  "launcher.options.effects.effect_ssrHint": "Fanns inte i originalspelet",
+  "launcher.options.effects.effect_bloom": "Bloom (glöd)"
 }

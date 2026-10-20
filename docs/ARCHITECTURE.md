@@ -87,7 +87,7 @@ runs is excluded from the recompiled library.
 | Hook | What it does | Off |
 |---|---|---|
 | Frame rate | Above 30 FPS the game's frame pacer and main loop step by each frame's real time, and 48 places tied to a 30 FPS frame follow it (physics timers, damping, cloth, the run's wall check). The limit applies live; **F3** toggles 30 FPS. | `BB_FRAME_HOOKS=0` (the community patches instead) |
-| Effects | Chromatic aberration, depth of field, motion blur, SSAO (only where the game has its target), the game's anti-aliasing and dynamic-light shadows switch without a restart. Screen-space reflections stay a patch at start. | `BB_HOT_EFFECTS=0` |
+| Effects | Chromatic aberration, depth of field, motion blur, SSAO (only where the game has its target), the game's anti-aliasing, dynamic-light shadows and bloom switch without a restart. Screen-space reflections stay a patch at start. | `BB_HOT_EFFECTS=0` |
 | Laurence's cinematic | Failed render jobs give their pool slot back; the render resource cache gets 512 MiB of the runtime's memory instead of 160 MiB. Above 30 FPS the cinematic hung or lost models without these. | `BB_JOB_SLOT_FIX=0`, `BB_RENDER_RESOURCE_CACHE_MB=160` |
 | Resource copies | The GPU side hears of the game's resource uploads (new memory model only). | `BB_GUEST_HOOKS=0` |
 

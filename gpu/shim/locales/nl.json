@@ -39,6 +39,7 @@
   "effects.effect_game_aa": "Eigen anti-aliasing van het spel",
   "effects.effect_dynamic_shadows": "Schaduwen van dynamische lichten",
   "effects.effect_ssr": "SSR-reflecties (niet in het originele spel)",
+  "effects.effect_bloom": "Bloom (gloed)",
   "dlss.hint": "NVIDIA DLSS Super Resolution (RTX-GPU's; Native AA is DLAA). Vereist de DLSS-brug en de bibliotheek van NVIDIA naast het spel; anders wordt FSR 3.1 gebruikt.",
   "hints.back": "Terug",
   "hints.close": "Sluiten",
@@ -160,5 +161,6 @@
   "launcher.options.effects.effect_game_aa": "Anti-aliasing van het spel",
   "launcher.options.effects.effect_dynamic_shadows": "Schaduwen van dynamische lichten",
   "launcher.options.effects.effect_ssr": "Screen-space reflecties",
-  "launcher.options.effects.effect_ssrHint": "Niet in het originele spel"
+  "launcher.options.effects.effect_ssrHint": "Niet in het originele spel",
+  "launcher.options.effects.effect_bloom": "Bloom (gloed)"
 }
