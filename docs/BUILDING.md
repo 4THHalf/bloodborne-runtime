@@ -74,7 +74,8 @@ a time (`pgrep -x bb-probe` first). Test windows open on the screen.
   backup instead; `KEEP_SAVE=1` keeps the previous test's progress. The test copy of the
   settings is `out/test-user/bbport.ini` (keep `show_fps=1` and `fps_size=big` there).
 - `tools/test_opening_video.sh NAME`: a new save in a fresh folder, through the opening video to
-  character creation. Reports whether playback completed. Part of release testing.
+  character creation. Reports whether playback completed. `VIDEO_GRAB=1` (in the environment,
+  not as an argument) saves the character creator's frame. Part of release testing.
 - `tools/grab.sh [--screen] NAME`: saves the game's own frame as a PNG (`--screen` includes the
   in-game menu and the counter). Pictures come from the game, never from the screen.
 - Test games are background-only apps (they never become the active app, so focus and Cmd+Q

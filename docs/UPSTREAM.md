@@ -23,6 +23,9 @@ The compatibility level imported from bbport is **0.51**, plus the 0.6 items bel
 |---|---|
 | Push constants written after the render pass begins (single frames shifted by half the screen); draws without a pixel shader rebuild their own fragment info; cached geometry-stage pipelines keep their fetch shader | Ported |
 | The present waits for its frame at every stage (single black or grey frames) | Ported |
+| GPU-written images keep their mip hashes from the first upload (an empty character-creator preview, #178) | Ported |
+| Decoder and format asserts during draw preparation (#144, #165, #166) | Already here (stale formats logged and skipped) |
+| Draw preparation on a quarter of the hardware threads on 12+ thread CPUs | Not needed: ours uses half |
 | Blur-kernel assertion `0xa0020007` ignored; GX per-frame command heaps of 1 MiB | Ported (the heap as a patch) |
 | Frame rate through hooks, live limit, F3 for 30 FPS | Ported (`bbport_frame_rate.cpp`) |
 | Game-code hooks (`InstallGuestCodeHook`) | Ported as an interface; our implementation runs its stubs in bbcpu |

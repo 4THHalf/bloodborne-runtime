@@ -25,16 +25,17 @@ def source(path):
     return {'commit':git('rev-parse','HEAD').decode().strip(), 'status':git('status','--porcelain').decode(), 'diff_sha256':hashlib.sha256(diff).hexdigest()}
 Path('out', 'stability_'+sys.argv[1]+'.json').write_text(json.dumps({'runtime':source(root),'recompiler':source(root/'recomp'),'switches':sys.argv[2:]},indent=2)+'\n')
 STAMP
-LEVEL_WAIT=${LEVEL_WAIT:-140} HOLD=${HOLD:-5} tools/test_run.sh "$name" "$@" "BB_USER_DIR=$isolated" > "out/video_$name.txt" 2>&1 &
+# No "level" here: character creation draws about 200 a frame; the run lasts LEVEL_WAIT.
+LEVEL_WAIT=${LEVEL_WAIT:-140} LEVEL_DRAWS=${LEVEL_DRAWS:-1000000} HOLD=${HOLD:-5} tools/test_run.sh "$name" "$@" "BB_USER_DIR=$isolated" > "out/video_$name.txt" 2>&1 &
 run_pid=$!
 log=''
 for ((i=0;i<120;i++)); do
     log=$(ls -t out/bench_"$name"_*.log 2>/dev/null | head -1 || true)
-    if [[ -n $log ]] && rg -q "save data 'SPRJ0005' mounted" "$log"; then break; fi
+    if [[ -n $log ]] && grep -qE "save data 'SPRJ0005' mounted" "$log"; then break; fi
     if ! kill -0 "$run_pid" 2>/dev/null; then break; fi
     sleep 1
 done
-if [[ -z $log ]] || ! rg -q "save data 'SPRJ0005' mounted" "$log"; then
+if [[ -z $log ]] || ! grep -qE "save data 'SPRJ0005' mounted" "$log"; then
     wait "$run_pid" || true
     printf '%s invalid: no new-game mount; log=%s
 ' "$name" "$log"
@@ -66,7 +67,7 @@ BINARIES
 # overlapping pad writes without the old fixed 15-second pause after the save mount.
 title_ready=0
 for ((i=0;i<120;i++)); do
-    if [[ -f out/test_$name.txt ]] && rg -q '^title input complete$' "out/test_$name.txt"; then
+    if [[ -f out/test_$name.txt ]] && grep -qE '^title input complete$' "out/test_$name.txt"; then
         title_ready=1
         break
     fi
@@ -88,15 +89,15 @@ tools/press.sh up 0.1
 sleep 0.8
 tools/press.sh cross 0.1
 for ((i=0;i<10;i++)); do
-    if rg -q "Mv_AudioPlayThread.*created" "$log" || ! kill -0 "$run_pid" 2>/dev/null; then break; fi
+    if grep -qE "Mv_AudioPlayThread.*created" "$log" || ! kill -0 "$run_pid" 2>/dev/null; then break; fi
     sleep 1
 done
-if pgrep -x bb-probe >/dev/null && ! rg -q "Mv_AudioPlayThread.*created" "$log"; then
+if pgrep -x bb-probe >/dev/null && ! grep -qE "Mv_AudioPlayThread.*created" "$log"; then
     tools/grab.sh "${name}_navigation" || true
 fi
 if [[ ${VIDEO_GRAB:-0} == 1 ]]; then
     while kill -0 "$run_pid" 2>/dev/null; do
-        if rg -q 'Stop: Could not stop playback: already stopped' "$log" && pgrep -x bb-probe >/dev/null; then
+        if grep -qE 'Stop: Could not stop playback: already stopped' "$log" && pgrep -x bb-probe >/dev/null; then
             sleep 3
             tools/grab.sh "${name}_creation" || true
             break

@@ -1051,8 +1051,13 @@ void TextureCache::RefreshImage(Image& image) {
         // upload-cost limit (Supermedo): establish the CPU baseline before a GPU write.
         // Unchanged guest bytes must not replace newer image contents. Large streamed
         // textures are not hashed unless writable or already modified by the GPU.
+        // Without baselines: every upload of a GPU-modified image keeps its mip hashes, the first
+        // one too (it is GpuDirty), else the first refresh after the GPU wrote it found no hash
+        // and uploaded unchanged guest memory over the GPU's data: the character creator's
+        // exposure (1x1, written by a compute shader) went to 0, no character. From bbport 0.6
+        // (8185b88, deadinside28/bloodborne_pc, issue #178).
         if (baseline ? NeedsImageUploadHash(mip_size, is_gpu_modified, is_gpu_dirty, writable)
-                     : protect) {
+                     : is_gpu_modified) {
             const u64 hash = HashUploadGuestMemory(image.info.guest_address + mip_offset, mip_size,
                                                  protect);
             auto& state = image.mip_hashes[m];
@@ -1068,7 +1073,7 @@ void TextureCache::RefreshImage(Image& image) {
                 }
             } else {
                 // Diagnostic comparison with the previous baseline timing.
-                if (state.value == hash) {
+                if (protect && state.value == hash) {
                     continue;
                 }
                 state.value = hash;
