@@ -98,9 +98,14 @@ bool CanBlitToSwapchain(const vk::PhysicalDevice physical_device, vk::Format for
     return MakeImageBlit(frame_width, frame_height, swapchain_width, swapchain_height, 0, 0);
 }
 
+/// The shown frame's aspect (bbgpu_frame_aspect, the menu pointer's window-to-stage mapping):
+/// any thread. From bbport 0.6.
+static std::atomic<float> shown_aspect{16.0f / 9.0f};
+
 static vk::Rect2D FitImage(s32 frame_width, s32 frame_height, s32 swapchain_width,
                            s32 swapchain_height) {
     float frame_aspect = static_cast<float>(frame_width) / frame_height;
+    shown_aspect.store(frame_aspect, std::memory_order_relaxed);
     float swapchain_aspect = static_cast<float>(swapchain_width) / swapchain_height;
 
     u32 dst_width = swapchain_width;
@@ -901,3 +906,7 @@ void Presenter::SetExpectedGameSize(s32 width, s32 height) {
 }
 
 } // namespace Vulkan
+
+extern "C" float bbgpu_frame_aspect(void) {
+    return Vulkan::shown_aspect.load(std::memory_order_relaxed);
+}
