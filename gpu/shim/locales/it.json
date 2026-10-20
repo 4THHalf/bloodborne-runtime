@@ -117,7 +117,7 @@
   "launcher.options.preset.3": "Prestazioni",
   "launcher.options.preset.4": "Ultra prestazioni",
   "launcher.options.fps.uncap": "Illimitata",
-  "launcher.options.fps.uncapHint": "Patch del tempo di fotogramma: qualsiasi frequenza",
+  "launcher.options.fps.uncapHint": "Il tempo reale di ogni fotogramma: qualsiasi frequenza, fisica corretta",
   "launcher.options.fps.60": "60",
   "launcher.options.fps.90": "90",
   "launcher.options.fps.30": "30",

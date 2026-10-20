@@ -117,7 +117,7 @@
   "launcher.options.preset.3": "效能",
   "launcher.options.preset.4": "極致效能",
   "launcher.options.fps.uncap": "不限",
-  "launcher.options.fps.uncapHint": "影格時間修補：任何影格率",
+  "launcher.options.fps.uncapHint": "按每幀的實際時間推進：任意幀率，物理保持正確",
   "launcher.options.fps.60": "60",
   "launcher.options.fps.90": "90",
   "launcher.options.fps.30": "30",

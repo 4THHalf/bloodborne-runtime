@@ -117,7 +117,7 @@
   "launcher.options.preset.3": "パフォーマンス",
   "launcher.options.preset.4": "ウルトラパフォーマンス",
   "launcher.options.fps.uncap": "無制限",
-  "launcher.options.fps.uncapHint": "フレーム時間パッチ：任意のフレームレート",
+  "launcher.options.fps.uncapHint": "各フレームの実時間で進行：任意のフレームレート、物理挙動も正確",
   "launcher.options.fps.60": "60",
   "launcher.options.fps.90": "90",
   "launcher.options.fps.30": "30",

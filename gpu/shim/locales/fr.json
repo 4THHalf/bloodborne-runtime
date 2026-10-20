@@ -117,7 +117,7 @@
   "launcher.options.preset.3": "Performance",
   "launcher.options.preset.4": "Ultra performance",
   "launcher.options.fps.uncap": "Illimitée",
-  "launcher.options.fps.uncapHint": "Patch de temps d'image : toute fréquence",
+  "launcher.options.fps.uncapHint": "Le temps réel de chaque image : toute fréquence, physique correcte",
   "launcher.options.fps.60": "60",
   "launcher.options.fps.90": "90",
   "launcher.options.fps.30": "30",

@@ -117,7 +117,7 @@
   "launcher.options.preset.3": "Ydelse",
   "launcher.options.preset.4": "Ultraydelse",
   "launcher.options.fps.uncap": "Ubegrænset",
-  "launcher.options.fps.uncapHint": "Billedtidspatch: enhver billedhastighed",
+  "launcher.options.fps.uncapHint": "Hvert billedes faktiske tid: enhver billedhastighed, fysikken forbliver korrekt",
   "launcher.options.fps.60": "60",
   "launcher.options.fps.90": "90",
   "launcher.options.fps.30": "30",

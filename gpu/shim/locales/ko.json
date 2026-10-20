@@ -117,7 +117,7 @@
   "launcher.options.preset.3": "성능",
   "launcher.options.preset.4": "울트라 성능",
   "launcher.options.fps.uncap": "제한 없음",
-  "launcher.options.fps.uncapHint": "프레임 시간 패치: 모든 프레임 레이트",
+  "launcher.options.fps.uncapHint": "각 프레임의 실제 시간: 모든 프레임 속도, 물리 유지",
   "launcher.options.fps.60": "60",
   "launcher.options.fps.90": "90",
   "launcher.options.fps.30": "30",

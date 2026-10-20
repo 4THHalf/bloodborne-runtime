@@ -117,7 +117,7 @@
   "launcher.options.preset.3": "Prestaties",
   "launcher.options.preset.4": "Ultraprestaties",
   "launcher.options.fps.uncap": "Onbeperkt",
-  "launcher.options.fps.uncapHint": "Frametime-patch: elke framerate",
+  "launcher.options.fps.uncapHint": "De echte tijd van elk beeld: elke framerate, natuurkunde blijft kloppen",
   "launcher.options.fps.60": "60",
   "launcher.options.fps.90": "90",
   "launcher.options.fps.30": "30",

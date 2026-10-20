@@ -117,7 +117,7 @@
   "launcher.options.preset.3": "Prestanda",
   "launcher.options.preset.4": "Ultraprestanda",
   "launcher.options.fps.uncap": "Obegränsad",
-  "launcher.options.fps.uncapHint": "Bildtidspatch: valfri bildfrekvens",
+  "launcher.options.fps.uncapHint": "Varje bildrutas verkliga tid: valfri bildfrekvens, fysiken stämmer",
   "launcher.options.fps.60": "60",
   "launcher.options.fps.90": "90",
   "launcher.options.fps.30": "30",

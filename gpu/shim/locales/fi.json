@@ -117,7 +117,7 @@
   "launcher.options.preset.3": "Suorituskyky",
   "launcher.options.preset.4": "Ultrasuorituskyky",
   "launcher.options.fps.uncap": "Rajoittamaton",
-  "launcher.options.fps.uncapHint": "Kuva-aikapaikka: mikä tahansa kuvataajuus",
+  "launcher.options.fps.uncapHint": "Jokaisen ruudun todellinen aika: mikä tahansa ruudunpäivitys, fysiikka pysyy oikeana",
   "launcher.options.fps.60": "60",
   "launcher.options.fps.90": "90",
   "launcher.options.fps.30": "30",

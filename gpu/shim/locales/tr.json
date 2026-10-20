@@ -117,7 +117,7 @@
   "launcher.options.preset.3": "Performans",
   "launcher.options.preset.4": "Ultra performans",
   "launcher.options.fps.uncap": "Sınırsız",
-  "launcher.options.fps.uncapHint": "Kare süresi yaması: her kare hızı",
+  "launcher.options.fps.uncapHint": "Her karenin gerçek süresi: her kare hızı, fizik doğru kalır",
   "launcher.options.fps.60": "60",
   "launcher.options.fps.90": "90",
   "launcher.options.fps.30": "30",

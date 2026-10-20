@@ -117,7 +117,7 @@
   "launcher.options.preset.3": "Rendimiento",
   "launcher.options.preset.4": "Ultra rendimiento",
   "launcher.options.fps.uncap": "Sin límite",
-  "launcher.options.fps.uncapHint": "Parche de tiempo de fotograma: cualquier tasa",
+  "launcher.options.fps.uncapHint": "El tiempo real de cada cuadro: cualquier tasa, con la física correcta",
   "launcher.options.fps.60": "60",
   "launcher.options.fps.90": "90",
   "launcher.options.fps.30": "30",
