@@ -6,6 +6,7 @@
 #pragma once
 
 #include <atomic>
+#include <string>
 
 namespace BbSettings {
 
@@ -18,6 +19,14 @@ inline bool IsFsr4(int upscaler) {
 enum Preset : int { NativeAA = 0, Quality, Balanced, Performance, UltraPerformance, PresetCount };
 enum DebugView : int { DebugNone = 0, DebugReactive = 1, DebugMotion = 2, DebugViewCount };
 enum class MenuLanguage { English, Russian };
+/// FPS counter: the screen's corners and edge centers (bbport.ini fps_position), and its size
+/// (fps_size: small, one line; big, with the upscaler, resolutions and a frame-time graph).
+enum FpsPosition : int { FpsTopLeft, FpsTopCenter, FpsTopRight, FpsBottomLeft, FpsBottomCenter,
+                         FpsBottomRight, FpsPositionCount };
+inline constexpr const char* FpsPositionNames[FpsPositionCount] = {
+    "top_left", "top_center", "top_right", "bottom_left", "bottom_center", "bottom_right"};
+enum FpsSize : int { FpsSmall, FpsBig, FpsSizeCount };
+inline constexpr const char* FpsSizeNames[FpsSizeCount] = {"small", "big"};
 
 /// Game effects switched by the community patches at start (patches.py EFFECTS): ini key,
 /// menu label, default (the game's own behaviour).
@@ -40,6 +49,10 @@ inline constexpr Effect Effects[] = {
     {"debug_menu", "Debug menu (requires font files)", "Debug menu (нужны файлы шрифтов)", false},
 };
 inline constexpr int EffectCount = int(sizeof(Effects) / sizeof(Effects[0]));
+/// The game's look (the launcher's Effects section) comes first; then the other start options.
+enum EffectIndex : int { EffectSsr = 6, GameEffectCount = 7, EffectSkipIntro = 7, EffectDebugCamera = 8,
+                         EffectDebugMenu = 9 };
+static_assert(EffectCount == 10);
 /// Live output resolutions: the upscaler's output and the UI host targets.
 inline constexpr int OutputWidths[] = {1280, 1920, 2560, 3840};
 inline constexpr int OutputHeights[] = {720, 1080, 1440, 2160};
@@ -66,6 +79,9 @@ struct Values {
     std::atomic<float> reactive_max{0.9f};
     std::atomic<int> debug_view{DebugNone};
     std::atomic<bool> show_fps{false};
+    /// Where the FPS counter is (FpsPosition) and how much it shows (FpsSize).
+    std::atomic<int> fps_position{1};
+    std::atomic<int> fps_size{0};
     /// The settings menu's position (fraction of the screen), -1 until it is moved.
     std::atomic<float> menu_x{-1.0f}, menu_y{-1.0f};
     // FSR 4 checks (menu): the provider's auto exposure, the jitter sign it is given.
@@ -116,6 +132,28 @@ int RenderPreset();
 bool ResolutionNeedsRestart();
 /// Writes the file (menu changes).
 void Save();
+/// With the launcher (BB_SETTINGS_CHANNEL=1): reads its setting changes from stdin, and makes
+/// Save send the menu's changes to it ("BBSET key=value"). Once, after Load.
+void StartLauncherChannel();
+/// Whether the launcher keeps the settings (the menu says so instead of naming bbport.ini).
+bool LauncherChannel();
+
+/// The launcher's own options that the menu also shows (launcher.json's keys and value text:
+/// true/false, numbers, names). The game starts with them in its environment (BB_FULLSCREEN, ...);
+/// the menu's changes go to the launcher as "BBSET launcher:key=value" and into the environment
+/// of an in-game restart. Fullscreen applies at once, the others at the next start.
+enum LauncherKey : int { LauncherFullscreen, LauncherDisplay, LauncherPresentMode, LauncherFpsMode,
+                         LauncherFpsLimit, LauncherMetalHud, LauncherDrawPipe, LauncherReadbacks,
+                         LauncherPreupload, LauncherKeyCount };
+std::string Launcher(LauncherKey key);
+/// The menu's change (sent to the launcher by the next Save).
+void SetLauncher(LauncherKey key, const std::string& value);
+/// A launcher option other than fullscreen differs from the one this run started with.
+bool LauncherNeedsRestart();
+/// Before an in-game restart: the launcher options into the environment run.sh starts with.
+void ExportLauncherEnvironment();
+/// Window thread: a fullscreen change to apply (1 on, 0 off), or -1.
+int TakeFullscreenRequest();
 
 /// Render resolution divisor of a preset (1.0 native, 1.5 quality, ...).
 float PresetScale(int preset);

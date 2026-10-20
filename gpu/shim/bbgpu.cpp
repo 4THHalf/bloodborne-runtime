@@ -273,6 +273,7 @@ extern "C" void bbgpu_notification_window_callback(void (*callback)(int,int,int,
 
 extern "C" int bbgpu_init(const BbGpuConfig* config) {
     BbSettings::Load();
+    BbSettings::StartLauncherChannel();
     // What the translator knows about this game (games/), before anything asks for it.
     Game::Select(config->serial);
 #ifdef BB_PGO_GENERATE

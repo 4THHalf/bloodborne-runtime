@@ -5,10 +5,19 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <map>
+#include <mutex>
 #include <string>
+#include <thread>
 #include <string_view>
 #include <utility>
 #include <vector>
+#ifdef _WIN32
+#include <io.h>
+#else
+#include <cerrno>
+#include <unistd.h>
+#endif
 
 namespace BbSettings {
 
@@ -58,6 +67,14 @@ void Set(Values& v, const std::string& key, const std::string& value) {
         v.debug_view = std::clamp(i, 0, DebugViewCount - 1);
     } else if (key == "show_fps") {
         v.show_fps = i != 0;
+    } else if (key == "fps_position") {
+        for (int p = 0; p < FpsPositionCount; ++p) {
+            if (value == FpsPositionNames[p]) v.fps_position = p;
+        }
+    } else if (key == "fps_size") {
+        for (int z = 0; z < FpsSizeCount; ++z) {
+            if (value == FpsSizeNames[z]) v.fps_size = z;
+        }
     } else if (key == "menu_pos") {
         float x = -1.0f, y = -1.0f;
         if (std::sscanf(value.c_str(), "%f,%f", &x, &y) == 2 && x >= 0.0f && x <= 1.0f && y >= 0.0f &&
@@ -210,10 +227,11 @@ bool ResolutionNeedsRestart() {
          (v.upscaler == UpscalerTaa) != (v.startup_upscaler == UpscalerTaa));
 }
 
-void Save() {
+namespace {
+
+/// The keys the menu writes, in this order, with their current values.
+std::vector<std::pair<std::string, std::string>> Keys() {
     const auto& v = Get();
-    // The keys the menu writes, in this order; the rest of the file stays as it is: the
-    // launcher's controls (key.* / pad.*) and its other keys, comments.
     std::vector<std::pair<std::string, std::string>> keys;
     const auto put = [&](const char* key, std::string value) { keys.emplace_back(key, std::move(value)); };
     const auto fixed = [](float value, int digits) {
@@ -235,6 +253,8 @@ void Save() {
     put("reactive_max", fixed(v.reactive_max, 2));
     put("debug_view", std::to_string(v.debug_view.load()));
     put("show_fps", flag(v.show_fps));
+    put("fps_position", FpsPositionNames[v.fps_position]);
+    put("fps_size", FpsSizeNames[v.fps_size]);
     put("fsr4_auto_exposure", flag(v.fsr4_auto_exposure));
     put("fsr4_invert_jitter", flag(v.fsr4_invert_jitter));
     // Read by patches.py at start.
@@ -248,6 +268,225 @@ void Save() {
     put("live_resolution", v.live_resolution < 0 ? "auto" : flag(v.live_resolution != 0));
     if (v.menu_x >= 0.0f && v.menu_y >= 0.0f) {
         put("menu_pos", fixed(v.menu_x, 4) + "," + fixed(v.menu_y, 4));
+    }
+    return keys;
+}
+
+// The launcher's settings channel (BB_SETTINGS_CHANNEL=1, set by the launcher, which owns the
+// settings in its database): the menu's changes go out as "BBSET key=value" lines on stdout, the
+// launcher's come in the same way on stdin. `known` holds the values the launcher has, so neither
+// side echoes the other's change back.
+bool Channel() {
+    static const bool on = [] {
+        const char* env = std::getenv("BB_SETTINGS_CHANNEL");
+        return env && env[0] == '1';
+    }();
+    return on;
+}
+std::mutex channel_mutex;
+std::map<std::string, std::string> known;
+
+// The launcher's options (LauncherKey): launcher.json's key, the variable the launcher starts the
+// game with, its default, and how a value becomes that variable (empty: the variable is unset).
+struct LauncherOption {
+    const char* key;
+    const char* env;
+    const char* fallback;
+};
+constexpr LauncherOption LauncherOptions[LauncherKeyCount] = {
+    {"fullscreen", "BB_FULLSCREEN", "false"}, {"display", "BB_DISPLAY", ""},
+    {"present_mode", "BB_PRESENT_MODE", "Fifo"}, {"fps_mode", "BB_FPS", "uncap"},
+    {"fps_limit", "BB_FPS_LIMIT", "0"},       {"metal_hud", "MTL_HUD_ENABLED", "false"},
+    {"draw_pipe", "BB_DRAW_PIPE", ""},        {"readbacks", "BB_READBACKS", ""},
+    {"preupload", "BB_PREUPLOAD", ""},
+};
+std::string launcher_values[LauncherKeyCount], launcher_startup[LauncherKeyCount];
+std::atomic<int> fullscreen_request{-1};
+
+bool IsBoolOption(int key) {
+    return key == LauncherFullscreen || key == LauncherMetalHud;
+}
+
+/// The launcher's value text from the variable it set (the inverse of EnvText).
+std::string FromEnvironment(int key) {
+    const char* env = std::getenv(LauncherOptions[key].env);
+    std::string value = env ? env : "";
+    if (IsBoolOption(key)) {
+        return value == "1" ? "true" : "false";
+    }
+    // run.sh exports BB_PREUPLOAD=1 (normal) when the launcher left it unset.
+    if (key == LauncherPreupload && value == "1") {
+        return "";
+    }
+    return value.empty() ? LauncherOptions[key].fallback : value;
+}
+
+std::string EnvText(int key, const std::string& value) {
+    if (IsBoolOption(key)) {
+        return value == "true" ? "1" : key == LauncherFullscreen ? "0" : "";
+    }
+    if (key == LauncherFpsLimit && std::atoi(value.c_str()) <= 0) {
+        return "";
+    }
+    return value;
+}
+
+int LauncherIndex(const std::string& key) {
+    for (int k = 0; k < LauncherKeyCount; ++k) {
+        if (key == LauncherOptions[k].key) return k;
+    }
+    return -1;
+}
+
+/// The next line of the launcher's input. read(2) on fd 0, not stdio: a thread blocked in fgets
+/// holds stdin's lock, and fflush(NULL) (an in-game restart) waited for it forever.
+bool NextLine(std::string& line) {
+    static std::string pending;
+    for (;;) {
+        if (const auto end = pending.find('\n'); end != std::string::npos) {
+            line = pending.substr(0, end);
+            pending.erase(0, end + 1);
+            return true;
+        }
+        char buffer[512];
+#ifdef _WIN32
+        const int got = _read(0, buffer, sizeof(buffer));
+#else
+        const ssize_t got = read(0, buffer, sizeof(buffer));
+        if (got < 0 && errno == EINTR) {
+            continue;
+        }
+#endif
+        if (got <= 0) {
+            return false;
+        }
+        pending.append(buffer, size_t(got));
+    }
+}
+
+void ReadLauncher() {
+    std::string text;
+    while (NextLine(text)) {
+        text.erase(text.find_last_not_of(" \t\r\n") + 1);
+        if (text.rfind("BBSET ", 0) != 0) {
+            continue;
+        }
+        const auto eq = text.find('=');
+        if (eq == std::string::npos || eq <= 6) {
+            continue;
+        }
+        const std::string key = text.substr(6, eq - 6), value = text.substr(eq + 1);
+        if (key.rfind("launcher:", 0) == 0) {
+            const int k = LauncherIndex(key.substr(9));
+            if (k < 0) {
+                continue;
+            }
+            std::scoped_lock lock{channel_mutex};
+            if (launcher_values[k] != value && k == LauncherFullscreen) {
+                fullscreen_request = value == "true" ? 1 : 0;
+            }
+            launcher_values[k] = value;
+            known[key] = value;
+            std::printf("Settings: %s=%s from the launcher\n", key.c_str(), value.c_str());
+            continue;
+        }
+        Set(Get(), key, value);
+        std::scoped_lock lock{channel_mutex};
+        // As the menu would write it (normalized), so the next Save does not send it back.
+        for (const auto& [k, v] : Keys()) {
+            if (k == key) known[k] = v;
+        }
+        std::printf("Settings: %s=%s from the launcher\n", key.c_str(), value.c_str());
+    }
+}
+
+} // namespace
+
+void StartLauncherChannel() {
+    {
+        std::scoped_lock lock{channel_mutex};
+        for (int k = 0; k < LauncherKeyCount; ++k) {
+            launcher_values[k] = launcher_startup[k] = FromEnvironment(k);
+            known[std::string("launcher:") + LauncherOptions[k].key] = launcher_values[k];
+        }
+    }
+    if (!Channel()) {
+        return;
+    }
+    {
+        std::scoped_lock lock{channel_mutex};
+        for (const auto& [key, value] : Keys()) {
+            known[key] = value;
+        }
+    }
+    std::thread(ReadLauncher).detach();
+    std::printf("Settings: kept in sync with the launcher\n");
+}
+
+bool LauncherChannel() {
+    return Channel();
+}
+
+std::string Launcher(LauncherKey key) {
+    std::scoped_lock lock{channel_mutex};
+    return launcher_values[key];
+}
+
+void SetLauncher(LauncherKey key, const std::string& value) {
+    std::scoped_lock lock{channel_mutex};
+    if (key == LauncherFullscreen && launcher_values[key] != value) {
+        fullscreen_request = value == "true" ? 1 : 0;
+    }
+    launcher_values[key] = value;
+}
+
+bool LauncherNeedsRestart() {
+    std::scoped_lock lock{channel_mutex};
+    for (int k = 0; k < LauncherKeyCount; ++k) {
+        if (k != LauncherFullscreen && launcher_values[k] != launcher_startup[k]) return true;
+    }
+    return false;
+}
+
+void ExportLauncherEnvironment() {
+    std::scoped_lock lock{channel_mutex};
+    for (int k = 0; k < LauncherKeyCount; ++k) {
+        const std::string value = EnvText(k, launcher_values[k]);
+#ifdef _WIN32
+        _putenv_s(LauncherOptions[k].env, value.c_str()); // empty removes it
+#else
+        if (value.empty()) {
+            unsetenv(LauncherOptions[k].env);
+        } else {
+            setenv(LauncherOptions[k].env, value.c_str(), 1);
+        }
+#endif
+    }
+}
+
+int TakeFullscreenRequest() {
+    return fullscreen_request.exchange(-1);
+}
+
+void Save() {
+    const auto keys = Keys();
+    if (Channel()) {
+        std::scoped_lock lock{channel_mutex};
+        for (const auto& [key, value] : keys) {
+            if (key == "menu_pos") continue;
+            if (auto it = known.find(key); it == known.end() || it->second != value) {
+                known[key] = value;
+                std::printf("BBSET %s=%s\n", key.c_str(), value.c_str());
+            }
+        }
+        for (int k = 0; k < LauncherKeyCount; ++k) {
+            const std::string key = std::string("launcher:") + LauncherOptions[k].key;
+            if (known[key] != launcher_values[k]) {
+                known[key] = launcher_values[k];
+                std::printf("BBSET %s=%s\n", key.c_str(), launcher_values[k].c_str());
+            }
+        }
+        std::fflush(stdout);
     }
 
     std::string out;

@@ -280,7 +280,9 @@ if [[ ${BB_ONLINE:-0} == 1 && -f scripts/online.py ]]; then
 fi
 probe_args=("$out/boot-linked.bin" --content-profile "$out/content.bin" --patches "$out/patches.bin" --app0 "$game" --user "${BB_USER_DIR:-$data/user}" --timeout "${BB_TIMEOUT:-0}" "$@")
 if [[ -n ${mod_game:-} ]]; then
-    "$probe" "${probe_args[@]}" &
+    # stdin passed on explicitly: a background command's is /dev/null otherwise (the launcher's
+    # settings channel arrives on it).
+    "$probe" "${probe_args[@]}" <&0 &
     mod_pid=$!
     trap 'kill -TERM "$mod_pid" 2>/dev/null || true' TERM INT
     mod_status=0
