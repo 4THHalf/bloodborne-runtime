@@ -58,6 +58,12 @@ SDL_DisplayID ChooseDisplay() {
 } // namespace
 
 WindowSDL::WindowSDL(s32 width_, s32 height_, const char* title) : width{width_}, height{height_} {
+    // The on-screen keyboard (in-game menu) types into the same text dialog.
+    BbOverlay::SetTextEditor(
+        [](BbOverlay::TextEdit edit, const char* text, void* context) {
+            static_cast<WindowSDL*>(context)->EditText(static_cast<int>(edit), text);
+        },
+        this);
     // Gamepads are sampled by runtime_pad.c; their events are pumped here with the window's.
     if (!SDL_InitSubSystem(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD)) {
         UNREACHABLE_MSG("Failed to initialize SDL video: {}", SDL_GetError());
@@ -125,6 +131,27 @@ void WindowSDL::BeginTextInput(const std::string& initial, const std::string& pr
     text_prompt = prompt;
     text_state = 0;
     text_requested = true;
+}
+
+void WindowSDL::EditText(int edit, const char* added) {
+    {
+        std::scoped_lock lock{text_mutex};
+        if (!text_active) {
+            return;
+        }
+        if (edit == 0 && added) {
+            text += added;
+        } else if (edit == 1 && !text.empty()) {
+            size_t cut = text.size() - 1; // drop one UTF-8 code point
+            while (cut > 0 && (static_cast<unsigned char>(text[cut]) & 0xC0) == 0x80) --cut;
+            text.erase(cut);
+        } else if (edit == 2 || edit == 3) {
+            text_state = edit == 3 ? 2 : 1;
+            text_active = false;
+            SDL_StopTextInput(window);
+        }
+        UpdateTextTitle();
+    }
 }
 
 int WindowSDL::PollTextInput(std::string& out) {
@@ -201,6 +228,7 @@ bool WindowSDL::PollEvents() {
     if (!text_active) {
         BbOverlay::UpdateTextInput(window);
     }
+    BbOverlay::ApplyWindowSettings(window);
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
         if (event.type == SDL_EVENT_MOUSE_MOTION) {

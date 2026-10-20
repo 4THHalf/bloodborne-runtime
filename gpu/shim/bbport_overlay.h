@@ -26,6 +26,10 @@ bool HandleEvent(const SDL_Event& event);
 /// Turns SDL text input on while the menu edits a value (window thread, once per poll).
 void UpdateTextInput(SDL_Window* window);
 
+/// Window thread, once per poll: fullscreen switched from the menu or the launcher, and the
+/// monitor names the menu offers.
+void ApplyWindowSettings(SDL_Window* window);
+
 /// Whether anything is drawn this frame (menu open or FPS counter on).
 bool Visible();
 
@@ -40,5 +44,10 @@ bool MenuOpen();
 
 /// Window thread: the game's text dialog (ImeDialog) state, drawn as a box over the frame.
 void SetTextPrompt(bool active, const std::string& prompt, const std::string& text);
+
+/// What the on-screen keyboard does to the text dialog's text (window thread, from HandleEvent).
+enum class TextEdit { Append, Backspace, Done, Cancel };
+/// The window's handler for those edits: the same text a physical keyboard types into.
+void SetTextEditor(void (*edit)(TextEdit edit, const char* text, void* context), void* context);
 
 } // namespace BbOverlay

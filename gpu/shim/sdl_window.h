@@ -36,6 +36,9 @@ public:
     void BeginTextInput(const std::string& initial, const std::string& prompt);
     /// 0 while typing, 1 confirmed (Enter), 2 cancelled (Escape); text is UTF-8.
     int PollTextInput(std::string& text);
+    /// The on-screen keyboard's edits (BbOverlay::TextEdit: 0 append `text`, 1 backspace, 2 done,
+    /// 3 cancel), as the physical keyboard's: window thread.
+    void EditText(int edit, const char* text);
     /// Mouse look (bbgpu_mouse_take): motion and wheel notches since the last call, reset.
     void TakeMouse(double& dx, double& dy, int& wheel_up, int& wheel_down);
     /// The window holds the mouse (relative mode) for looking around.

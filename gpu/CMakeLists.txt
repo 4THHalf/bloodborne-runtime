@@ -150,10 +150,14 @@ set_source_files_properties(third_party/imgui/imgui.cpp third_party/imgui/imgui_
     third_party/imgui/imgui_tables.cpp third_party/imgui/imgui_widgets.cpp
     third_party/imgui/backends/imgui_impl_vulkan.cpp PROPERTIES
     COMPILE_OPTIONS "-fvisibility=hidden;-fvisibility-inlines-hidden")
+# The menu's fonts match the launcher's: Inter (text) and Cinzel (headings), SIL OFL 1.1; DejaVu
+# fills in the scripts they lack (Bitstream Vera license).
 target_compile_definitions(bbgpu PRIVATE IMGUI_IMPL_VULKAN_NO_PROTOTYPES
-    BB_FONT_PATH="${CMAKE_CURRENT_SOURCE_DIR}/third_party/fonts/DejaVuSans.ttf")
+    BB_FONT_PATH="${CMAKE_CURRENT_SOURCE_DIR}/third_party/fonts/DejaVuSans.ttf"
+    BB_FONT_TEXT_PATH="${CMAKE_CURRENT_SOURCE_DIR}/third_party/fonts/Inter.ttf"
+    BB_FONT_HEADING_PATH="${CMAKE_CURRENT_SOURCE_DIR}/third_party/fonts/Cinzel.ttf")
 set_source_files_properties(shim/bbport_overlay.cpp PROPERTIES
-    OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/fonts/DejaVuSans.ttf")
+    OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/fonts/DejaVuSans.ttf;${CMAKE_CURRENT_SOURCE_DIR}/third_party/fonts/Inter.ttf;${CMAKE_CURRENT_SOURCE_DIR}/third_party/fonts/Cinzel.ttf")
 # The in-game menu's texts (shim/locales/*.json) as a C++ table for shim/bbport_text.cpp.
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 file(GLOB BB_TEXT_LOCALES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/shim/locales/*.json)

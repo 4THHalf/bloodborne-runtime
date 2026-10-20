@@ -74,6 +74,9 @@ Changes taken from other ports of bbport, with thanks:
 - [cpp-httplib](https://github.com/yhirose/cpp-httplib) by Yuji Hirose (MIT), in the online module
 - [half](https://half.sourceforge.net/) (MIT)
 - DejaVu fonts
+- [Inter](https://github.com/rsms/inter) by Rasmus Andersson and [Cinzel](https://github.com/NDISCOVER/Cinzel)
+  by Natanael Gama (SIL Open Font License 1.1), the in-game menu's text and headings, as in the
+  launcher
 - The launcher: [Tauri](https://tauri.app), [React](https://react.dev),
   [shadcn/ui](https://ui.shadcn.com), [Tailwind CSS](https://tailwindcss.com),
   [i18next](https://www.i18next.com) (MIT)
