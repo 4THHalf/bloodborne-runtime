@@ -20,14 +20,15 @@ these were investigated. Run-by-run logs of the investigations are in this file'
 | In-game restart froze | A thread blocked in `fgets` held stdin's lock and the restart's `fflush` waited for it | The launcher channel reads with `read(2)` | 0.8.0 |
 | Stale texture formats, garbage PM4 headers, null vertex-buffer tables, flip interrupts ahead of their label stopped the game | Rare bad states | Each is logged and skipped (from the Supermedo fork) | 0.8.0 |
 | Blur-kernel assertion `0xa0020007`; crash at `0x2199310` (GX command heap full) | Game data out of range; a 256 KiB per-frame heap | Logged and ignored; 1 MiB heaps (`BB_GX_HEAP=0`) (from bbport 0.6) | 0.8.0 |
+| Metal recorder fault in `BindStage` while loading | Metal pipelines held shader pointers after Vulkan reused a module handle; queued draws held pipeline entries after deletion | Shader modules kept by SPIR-V content, bound pipeline entries shared through deferred draws | Unreleased (`e0348c2`) |
 
 ## Open
 
 - **Native 1080p crashes.** A long Metal session ended at a null host instruction pointer on a
   GX worker. The JIT's empty indirect-branch cache hid the guest branch site; bbcpu now reports
   that site if the null target recurs. A copied-save load reached the same null guest object
-  access on both Metal and MoltenVK, so that loading fault is not Metal-specific. A separate
-  Metal run aborted in `setFragmentBytes` while loading. The underlying causes remain open.
+  access on both Metal and MoltenVK, so that loading fault is not Metal-specific. A null guest
+  virtual call was also reported during a Metal test. Their underlying cause remains open.
 - **Characters drawn black above about 3.5 million scene pixels** (1440p without an upscaler or
   with Native AA, 4K Quality). The boundary lies between 3.45 and 3.67 million pixels, with FSR
   on or off, at 1440p or 4K output, with more memory, and on the Metal renderer too. No cap of

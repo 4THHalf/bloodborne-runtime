@@ -97,9 +97,11 @@ Huax-1839/bloodborne-macos), not merged: their renderer is Metal only.
 
 Every pipeline the game uses builds in Metal (550: 510 graphics, 40 compute; 0 failed). The
 frame path met 0 draws without a Metal pipeline and 0 unsupported commands. An earlier full play
-session completed; a later native 1080p play session crashed on a GX worker, and a copied-save
-load aborted in Metal's fragment binding. Recording costs a little more per draw on the GPU
-thread (5.3–5.6 against 5.1–5.2 µs). Characters drawn black above 3.5 million scene pixels
+session completed; a later native 1080p play session crashed on a GX worker. A copied-save load
+aborted in Metal's fragment binding; `e0348c2` retains the shader bindings and pipeline entries
+through deferred recording. The same load then reached the level but encountered a guest worker
+fault, also seen with MoltenVK. Recording costs a little more per draw on the GPU thread
+(5.3–5.6 against 5.1–5.2 µs). Characters drawn black above 3.5 million scene pixels
 happen on Metal too.
 
 ## Next
