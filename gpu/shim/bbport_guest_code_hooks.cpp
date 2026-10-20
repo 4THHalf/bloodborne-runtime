@@ -270,8 +270,9 @@ void KeepGuestCodeWritable() {
     code_writable.store(true, std::memory_order_release);
 }
 
-bool InstallGuestCodeHook(void* address, std::span<const std::uint8_t> expected, std::uint64_t tag,
-                          GuestCodeHook hook, const std::uint8_t* skip_flag) {
+namespace {
+bool Install(void* address, std::span<const std::uint8_t> expected, std::uint64_t tag, GuestCodeHook hook,
+             const std::uint8_t* skip_flag, bool after) {
     auto* code = static_cast<std::uint8_t*>(address);
     if (!hook || expected.size() < NearJumpBytes) {
         return false;
@@ -292,7 +293,7 @@ bool InstallGuestCodeHook(void* address, std::span<const std::uint8_t> expected,
             return false;
         }
     }
-    // int3, the replaced instructions, jmp [rip + 0] back.
+    // int3, the replaced instructions, jmp [rip + 0] back (after: the instructions, then int3).
     const std::size_t stub_size = 1 + expected.size() + 14;
     if (count == MaxHooks) {
         std::fprintf(stderr, "Guest code hook at %p: too many hooks\n", address);
@@ -318,8 +319,9 @@ bool InstallGuestCodeHook(void* address, std::span<const std::uint8_t> expected,
 #if defined(__APPLE__)
     mprotect(area, AreaSize, PROT_READ | PROT_WRITE);
 #endif
-    stub[0] = 0xcc;
-    std::memcpy(stub + 1, expected.data(), expected.size());
+    const std::size_t trap_at = after ? expected.size() : 0;
+    std::memcpy(stub + (after ? 0 : 1), expected.data(), expected.size());
+    stub[trap_at] = 0xcc;
     std::uint8_t* jump = stub + 1 + expected.size();
     const std::uint8_t jmp_rip[] = {0xff, 0x25, 0, 0, 0, 0};
     std::memcpy(jump, jmp_rip, sizeof(jmp_rip));
@@ -330,7 +332,7 @@ bool InstallGuestCodeHook(void* address, std::span<const std::uint8_t> expected,
 #endif
     area_used += (stub_size + 15) & ~std::size_t(15);
 
-    hooks[count] = Hook{reinterpret_cast<std::uintptr_t>(stub), tag, hook, skip_flag, begin,
+    hooks[count] = Hook{reinterpret_cast<std::uintptr_t>(stub + trap_at), tag, hook, skip_flag, begin,
                         expected.size()};
     hook_count.store(count + 1, std::memory_order_release);
     InstallTrapHandler();
@@ -342,6 +344,18 @@ bool InstallGuestCodeHook(void* address, std::span<const std::uint8_t> expected,
     std::memcpy(patch.data() + 1, &rel32, 4);
     WriteCode(code, patch.data(), patch.size());
     return true;
+}
+
+} // namespace
+
+bool InstallGuestCodeHook(void* address, std::span<const std::uint8_t> expected, std::uint64_t tag,
+                          GuestCodeHook hook, const std::uint8_t* skip_flag) {
+    return Install(address, expected, tag, hook, skip_flag, false);
+}
+
+bool InstallGuestCodeHookAfter(void* address, std::span<const std::uint8_t> expected, std::uint64_t tag,
+                               GuestCodeHook hook) {
+    return Install(address, expected, tag, hook, nullptr, true);
 }
 
 } // namespace Core

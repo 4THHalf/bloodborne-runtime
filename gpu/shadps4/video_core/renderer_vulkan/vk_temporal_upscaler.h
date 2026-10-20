@@ -209,7 +209,8 @@ private:
     VideoCore::ImageId scene_color{};
     bool done_this_frame = false;
     u32 preset_file_frames = 0; ///< BB_PRESET_FILE polling
-    int applied_output = -1;
+    u32 applied_output = 0; ///< BbSettings::PackSize; 0: none yet
+    float applied_aspect = 0.0f; ///< told to the game hooks
     bool snapshot_taken = false;
     bool opaque_valid = false;
     bool mask_ready = false;

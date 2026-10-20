@@ -1901,6 +1901,7 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
     // upscaler off at run time with it still running lost the device on MoltenVK).
     // (Reset for every draw: a motion draw without vertex buffers kept the last draw's.)
     push_data.motion_param = 0;
+    UiEdgeStretch(pipeline);
     if (motion_draw && motion_geometry && upscaler->Active()) {
         BB_SECTION(Motion);
         const auto& vs = pipeline->GetStage(Shader::SwStage::Vertex);
@@ -2142,6 +2143,8 @@ void Rasterizer::DrawIndirectRecord(const GraphicsPipeline* pipeline, bool is_in
     push_data.xoffset *= target_scale[0];
     push_data.yscale *= target_scale[1];
     push_data.yoffset *= target_scale[1];
+    push_data.motion_param = 0;
+    UiEdgeStretch(pipeline);
     draw_jitter = {};
     if (upscaler->Enabled() && db_desc.first && db_desc.first == camera_motion->Depth()) {
         draw_jitter = upscaler->Jitter();
@@ -4378,6 +4381,7 @@ RenderState Rasterizer::BeginRendering(const GraphicsPipeline* pipeline) {
             attachment_feedback_loop = false;
             push_data.scene_size = begin_memo.scene_size;
             target_scale = begin_memo.target_scale;
+            ui_edges = begin_memo.ui_edges;
             return begin_memo.state;
         }
         ++begin_memo_misses;
@@ -4394,7 +4398,7 @@ RenderState Rasterizer::BeginRendering(const GraphicsPipeline* pipeline) {
         if (!clears) {
             // Recomputed after the full path: it may have started the scene (scene_started).
             begin_memo = {true, MakeBeginSignature(pipeline), state, push_data.scene_size,
-                          target_scale};
+                          target_scale, ui_edges};
         }
     }
     return state;
@@ -4656,6 +4660,7 @@ RenderState Rasterizer::BeginRenderingFull(const GraphicsPipeline* pipeline) {
     // bbport: a pass drawn into the upscaler's output-size images (UI, display pass): every
     // attachment must be redirected, viewports and scissors are scaled.
     target_scale = {1.0f, 1.0f};
+    ui_edges = {1.0f, 1.0f};
     if (color_redirected || depth_redirected) {
         u32 color_targets = 0;
         for (u32 cb = 0; cb < state.num_color_attachments; ++cb) {
@@ -4705,6 +4710,10 @@ RenderState Rasterizer::BeginRenderingFull(const GraphicsPipeline* pipeline) {
             target_scale = UiComposition::Scale(guest_extent.first, guest_extent.second,
                                                 redirect.width, redirect.height,
                                                 native_coordinates);
+            if (const auto edges = UiComposition::ScreenEdges(redirect.width, redirect.height);
+                native_coordinates && (edges[0] < 1.0f || edges[1] < 1.0f)) {
+                ui_edges = edges;
+            }
         }
     }
 
@@ -4784,6 +4793,30 @@ RenderState Rasterizer::BeginRenderingFull(const GraphicsPipeline* pipeline) {
         object_motion->Attach(state, state.width, state.height);
     }
     return state;
+}
+
+// From bbport 0.6 (8185b88, deadinside28/bloodborne_pc): every vertex shader but the motion
+// vectors' has the corner snap (EmitUiEdgeStretch). A picture over the whole screen (the
+// title's: 2048x1024) keeps its proportions, and so does text (its glyph sheet is 2048x2048).
+// Masked content (Scaleform's masks are stencil tests) and the masks stay.
+void Rasterizer::UiEdgeStretch(const GraphicsPipeline* pipeline) {
+    const auto& regs = Regs();
+    if (ui_edges[0] >= 1.0f && ui_edges[1] >= 1.0f) {
+        return;
+    }
+    if (regs.IsClipDisabled() || pipeline->GetGraphicsKey().motion_vectors ||
+        (regs.depth_control.stencil_enable && regs.depth_buffer.StencilValid())) {
+        return;
+    }
+    if (const auto* ps = pipeline->GetStages()[u32(Shader::SwStage::Fragment)];
+        ps && !ps->images.empty()) {
+        const auto texture = ps->images[0].GetSharp(*ps);
+        if (u32(texture.width) + 1 >= 2048 || u32(texture.height) + 1 >= 2048) {
+            return;
+        }
+    }
+    push_data.motion_param = UiComposition::EdgeParam(ui_edges[0], ui_edges[1],
+                                                       regs.viewports[0].yscale > 0.0f);
 }
 
 void Rasterizer::Resolve() {

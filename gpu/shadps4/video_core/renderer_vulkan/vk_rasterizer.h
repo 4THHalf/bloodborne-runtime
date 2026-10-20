@@ -316,6 +316,7 @@ private:
         RenderState state;
         u32 scene_size = 0;
         std::array<float, 2> target_scale{};
+        std::array<float, 2> ui_edges{};
     } begin_memo;
     u64 begin_memo_hits = 0, begin_memo_misses = 0;
     void Resolve();
@@ -481,6 +482,11 @@ private:
     vk::ImageView NullImageView(const Shader::ImageResource& desc, const AmdGpu::Image& sharp) const;
     std::array<float, 2> draw_jitter{};         ///< viewport offset of the current draw, pixels
     std::array<float, 2> target_scale{1.0f, 1.0f}; ///< pass drawn into the upscaler's output-size images
+    /// The UI pass on an output of another aspect ratio: where the game's 16:9 screen ends
+    /// (UiComposition::ScreenEdges); {1, 1}: not such a pass.
+    std::array<float, 2> ui_edges{1.0f, 1.0f};
+    /// The UI edge stretch for this draw (push_data.motion_param), bbport 0.6.
+    void UiEdgeStretch(const GraphicsPipeline* pipeline);
     const bool host_markers_enabled;
     const bool guest_markers_enabled;
 

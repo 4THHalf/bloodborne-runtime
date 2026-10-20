@@ -1,5 +1,6 @@
 // bbport: SDL3 window for the Vulkan swapchain (X11, Wayland or a Metal layer on macOS).
 #include "bbport_frame_rate.h"
+#include "bbport_settings.h"
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -54,6 +55,14 @@ SDL_DisplayID ChooseDisplay() {
     }
     SDL_free(ids);
     return display;
+}
+
+// The monitor the window is on, in pixels: the output's aspect ratio "Auto" follows it (bbport 0.6).
+void TellMonitor(SDL_Window* window) {
+    if (const SDL_DisplayMode* mode = SDL_GetDesktopDisplayMode(SDL_GetDisplayForWindow(window))) {
+        const float density = mode->pixel_density > 0.0f ? mode->pixel_density : 1.0f;
+        BbSettings::SetMonitor(int(mode->w * density + 0.5f), int(mode->h * density + 0.5f));
+    }
 }
 
 } // namespace
@@ -117,6 +126,7 @@ WindowSDL::WindowSDL(s32 width_, s32 height_, const char* title) : width{width_}
     width = w;
     height = h;
     LOG_INFO(Frontend, "Window {}x{} on {}", w, h, driver);
+    TellMonitor(window);
 #ifdef __APPLE__
     std::printf("Window: %dx%d pixels (pixel density %.2f)\n", w, h, SDL_GetWindowPixelDensity(window));
 #endif
@@ -304,6 +314,9 @@ bool WindowSDL::PollEvents() {
             height = h;
             break;
         }
+        case SDL_EVENT_WINDOW_DISPLAY_CHANGED:
+            TellMonitor(window);
+            break;
         case SDL_EVENT_QUIT:
         case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
             if (is_open) {

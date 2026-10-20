@@ -8,13 +8,17 @@
 #include "bbport_guest_code_hooks.h"
 #include "bbport_settings.h"
 #include "cpu/bbcpu.h"
+#include "platform.h"
 
 #include <algorithm>
 #include <array>
 #include <atomic>
 #include <cstdio>
 #include <cstdlib>
+#include <cmath>
 #include <cstring>
+#include <initializer_list>
+#include <new>
 #include <sys/mman.h>
 #include <unistd.h>
 
@@ -304,6 +308,301 @@ bool InstallHotEffects() {
     hot_effects = true;
     return true;
 }
+// ---- The output's aspect ratio (bbport 0.6) ----
+// Data the redirected instructions read: within a rel32 of the game's code (the runtime's low
+// memory, after the image).
+struct alignas(16) MarkerScale {
+    float game[4];                     ///< the game's constant
+    std::atomic<std::uint32_t> now[4]; ///< what the instruction multiplies by
+};
+struct NearData {
+    std::array<MarkerScale, 3> marker_scales;
+};
+NearData* near_data = nullptr;
+
+// The camera manager copies the active camera's projection parameters into the current camera
+// every frame (+0x50 vertical field of view, +0x54 aspect ratio, +0x58 near, +0x5c far; four plain
+// copies, and a blend of two cameras, one of them per update); the projection, the culling and
+// the HUD's markers read them there. After the copy the output's aspect ratio replaces the game's
+// 1.777 when one is set: a wider output sees more to the sides at the same height; a taller one
+// keeps the width and sees more above and below (the field of view widened: 2 atan(tan(fov / 2)
+// * 16:9 / aspect)).
+std::atomic<std::uint32_t> camera_aspect_bits{0}; ///< float bits; 0: the game's
+std::atomic<std::uint32_t> camera_fov_scale{0};   ///< float bits: the tangent's factor; 0: none
+std::atomic<u64> camera_state{0};                 ///< the current camera
+struct ParamStore {
+    u64 offset;
+    std::array<u8, 5> code; ///< the store the hook follows
+};
+constexpr std::array<ParamStore, 5> CameraParamStores = {{
+    {0x1436c2c, {0xc5, 0xfa, 0x11, 0x43, 0x5c}}, // vmovss %xmm0, 0x5c(%rbx): the follow camera
+    {0x1436d8a, {0xc5, 0xfa, 0x11, 0x43, 0x5c}},
+    {0x1436e68, {0xc5, 0xf8, 0x11, 0x4b, 0x50}}, // vmovups %xmm1, 0x50(%rbx): a blend of two
+    {0x1436eec, {0xc5, 0xfa, 0x11, 0x43, 0x5c}},
+    {0x1436f4b, {0xc5, 0xfa, 0x11, 0x43, 0x5c}},
+}};
+
+void PS4_SYSV_ABI CameraParams(u64, const Core::GuestRegisterSnapshot* r) {
+    auto* camera = reinterpret_cast<float*>(r->rbx);
+    camera_state.store(r->rbx, std::memory_order_relaxed);
+    if (const std::uint32_t bits = camera_aspect_bits.load(std::memory_order_relaxed)) {
+        std::memcpy(&camera[0x54 / 4], &bits, 4);
+    }
+    if (const std::uint32_t bits = camera_fov_scale.load(std::memory_order_relaxed)) {
+        float factor;
+        std::memcpy(&factor, &bits, 4);
+        camera[0x50 / 4] = 2.0f * std::atan(std::tan(camera[0x50 / 4] * 0.5f) * factor);
+    }
+}
+
+int InstallCameraAspectHooks() {
+    int installed = 0;
+    for (const auto& site : CameraParamStores) {
+        installed += Core::InstallGuestCodeHookAfter(reinterpret_cast<void*>(image_base + site.offset),
+                                                     site.code, 0, CameraParams);
+    }
+    return installed;
+}
+
+// The HUD's markers over characters (lock-on, enemies' health bars, damage numbers): projected
+// with the current camera, then placed in the game's 1920x1080 UI by `* (0.5, -0.5, ..) +
+// (0.5, 0.5, ..)` (three places). The UI is drawn in the middle of a wider (taller) output at its
+// height (width): there a marker's 0.5 becomes 0.5 * output aspect / 16:9 (16:9 / aspect for y).
+// The multiply reads the runtime's vector instead of the game's constant (its operand moved).
+struct MarkerSite {
+    u64 offset;
+    u64 scale; ///< the constant the multiply reads
+};
+constexpr std::array<MarkerSite, 3> MarkerSites = {{
+    {0x1644379, 0x48f9a00},
+    {0x1644c45, 0x48f9a60},
+    {0x16452b7, 0x48f9ad0},
+}};
+std::atomic<int> marker_sites{0};
+std::atomic<float> marker_kx{1.0f}, marker_ky{1.0f};
+
+void UpdateMarkerScales() {
+    if (!near_data) return;
+    const float kx = marker_kx.load(std::memory_order_relaxed), ky = marker_ky.load(std::memory_order_relaxed);
+    for (MarkerScale& m : near_data->marker_scales) {
+        const float now[4] = {m.game[0] * kx, m.game[1] * ky, m.game[2], m.game[3]};
+        for (int c = 0; c < 4; ++c) {
+            std::uint32_t v;
+            std::memcpy(&v, &now[c], 4);
+            m.now[c].store(v, std::memory_order_relaxed);
+        }
+    }
+}
+
+int InstallMarkerHooks() {
+    if (!near_data) return 0;
+    int installed = 0;
+    for (std::size_t i = 0; i < MarkerSites.size(); ++i) {
+        const MarkerSite& site = MarkerSites[i];
+        // vmulps disp(%rip), %xmm0, %xmm0 reading `scale`.
+        auto* code = reinterpret_cast<u8*>(image_base + site.offset);
+        std::int32_t disp;
+        std::memcpy(&disp, code + 4, 4);
+        if (code[0] != 0xc5 || code[1] != 0xf8 || code[2] != 0x59 || code[3] != 0x05 ||
+            std::int64_t(site.offset) + 8 + disp != std::int64_t(site.scale)) {
+            continue;
+        }
+        MarkerScale& m = near_data->marker_scales[i];
+        std::memcpy(m.game, reinterpret_cast<const void*>(image_base + site.scale), sizeof(m.game));
+        const std::int64_t to = std::int64_t(reinterpret_cast<u64>(&m.now)) -
+                                std::int64_t(image_base + site.offset + 8);
+        if (to != std::int32_t(to)) continue;
+        const std::int32_t to32 = std::int32_t(to);
+        WriteHotCode(reinterpret_cast<u64>(code + 4), reinterpret_cast<const u8*>(&to32), 4);
+        ++installed;
+    }
+    UpdateMarkerScales();
+    marker_sites.store(installed, std::memory_order_relaxed);
+    return installed;
+}
+
+// The game's UI (Scaleform movies). The menu system sets each movie's viewport every frame
+// (SetViewport, 0x1f510: rsi a GFx::Viewport: buffer 1920x1080, ShowAll, centred). With the
+// output's pixel aspect ratio there (Viewport::AspectRatio: (output width / height) / 16:9), a
+// movie shows its 16:9 screen in the middle of a wider (taller) view, squeezed into the 1920x1080
+// frame, which the output stretches back (UiComposition::Scale): what lies past the game's screen
+// (the HUD's groups at the edges) is drawn, not culled.
+std::atomic<float> gfx_pixel_aspect{1.0f};
+void PS4_SYSV_ABI ViewportAdjust(u64, const Core::GuestRegisterSnapshot* r) {
+    auto* v = reinterpret_cast<std::int32_t*>(r->rsi);
+    // The game's full-screen movies (1920x1080 in a 1920x1080 frame) only.
+    if (v[0] == 1920 && v[1] == 1080 && v[2] == 0 && v[3] == 0 && v[4] == 1920 && v[5] == 1080) {
+        const float aspect = gfx_pixel_aspect.load(std::memory_order_relaxed);
+        std::memcpy(v + 12, &aspect, 4);
+    }
+}
+
+// The HUD anchored to the output's edges. The game lays its HUD out for 1920x1080; on a wider
+// output the UI shows that screen in the middle, and its groups would stay there. They are moved
+// as the game moves its own clips: through the movie's members (GFx::Value, SetMember "x"/"y")
+// from the game's screen update (0x1bf9e10, rdi the screen; the HUD a value wrapper at +0xa80,
+// its movie's root GFx::Value at +0x30). The bars, items and gauges (PlayerHUD) go to the left
+// edge, blood echoes and insight to the right, the autosave icon right; on a taller output the
+// top ones go up and the boss bar down. BB_HUD_ANCHOR=0 keeps them in the 16:9 middle.
+struct GfxValue {
+    u64 links[2] = {~u64(0), ~u64(0)};
+    void* object_interface = nullptr;
+    std::uint32_t type = 0, pad = 0;
+    union {
+        double number;
+        void* data;
+    } value{};
+    u64 aux = 0;
+};
+static_assert(sizeof(GfxValue) == 0x30);
+constexpr std::uint32_t GfxManaged = 0x40, GfxNumber = 5, GfxDisplayObject = 10;
+constexpr std::size_t SlotRelease = 0x18, SlotGetMember = 0x28, SlotSetMember = 0x30;
+u64 GfxMethod(void* oi, std::size_t slot) {
+    return *reinterpret_cast<const u64*>(*reinterpret_cast<u8**>(oi) + slot);
+}
+u64 Call(u64 fn, std::initializer_list<u64> args) {
+    return runtime_guest_call(reinterpret_cast<const void*>(fn), int(args.size()), args.begin());
+}
+bool GfxIsObject(const GfxValue& v) {
+    return v.object_interface && (v.type & 0x8c) == 8;
+}
+void GfxRelease(GfxValue& v) {
+    if (v.object_interface && (v.type & GfxManaged)) {
+        Call(GfxMethod(v.object_interface, SlotRelease),
+             {u64(v.object_interface), u64(&v), u64(v.value.data)});
+    }
+    v = GfxValue{};
+}
+bool GfxGet(const GfxValue& object, const char* name, GfxValue& out) {
+    out = GfxValue{};
+    if (!GfxIsObject(object)) return false;
+    const bool isdobj = (object.type & 0x8f) == GfxDisplayObject;
+    return (Call(GfxMethod(object.object_interface, SlotGetMember),
+                 {u64(object.object_interface), u64(object.value.data), u64(name), u64(&out), u64(isdobj)}) &
+            0xff) != 0;
+}
+bool GfxGetNumber(const GfxValue& object, const char* name, double& number) {
+    GfxValue v;
+    const bool ok = GfxGet(object, name, v) && (v.type & 0x8f) == GfxNumber;
+    if (ok) number = v.value.number;
+    GfxRelease(v);
+    return ok;
+}
+bool GfxSetNumber(const GfxValue& object, const char* name, double number) {
+    if (!GfxIsObject(object)) return false;
+    GfxValue v;
+    v.type = GfxNumber;
+    v.value.number = number;
+    const bool isdobj = (object.type & 0x8f) == GfxDisplayObject;
+    return (Call(GfxMethod(object.object_interface, SlotSetMember),
+                 {u64(object.object_interface), u64(object.value.data), u64(name), u64(&v), u64(isdobj)}) &
+            0xff) != 0;
+}
+
+constexpr u64 HudWrapperVtable = 0x539a070; ///< the value wrapper's
+std::atomic<float> hud_dx{0.0f}, hud_dy{0.0f}; ///< the shift for an edge, in the HUD's pixels
+bool hud_anchor_on = true;
+struct HudItem {
+    int parent; ///< 0 the root, 1 PlayerHUD
+    const char* name;
+    float fx, fy;
+    double base_x = 0, base_y = 0;
+    double set_x = 0, set_y = 0; ///< what the runtime set last
+    bool known = false;
+};
+std::array<HudItem, 5> hud_items = {{
+    {0, "PlayerHUD", -1.0f, -1.0f},
+    {1, "Soul", 2.0f, 0.0f}, // in PlayerHUD: twice, for its move to the left
+    {1, "HeroPoint", 2.0f, 0.0f},
+    {0, "AutoSaveIcon", 1.0f, -1.0f},
+    {0, "BossTop", 0.0f, 1.0f},
+}};
+
+void PS4_SYSV_ABI HudFrame(u64, const Core::GuestRegisterSnapshot* r) {
+    const u64 screen = r->rdi;
+    const u64 hud = screen ? *reinterpret_cast<const u64*>(screen + 0xa80) : 0;
+    if (!hud || *reinterpret_cast<const u64*>(hud) != image_base + HudWrapperVtable) {
+        return;
+    }
+    const GfxValue& root = *reinterpret_cast<const GfxValue*>(hud + 0x30);
+    static u64 last_hud = 0;
+    static unsigned frames = 0;
+    static float applied_dx = 0.0f, applied_dy = 0.0f;
+    if (hud != last_hud) {
+        last_hud = hud; // a new HUD (another area): where the game put its groups is read again
+        for (HudItem& item : hud_items) item.known = false;
+    }
+    const float dx = hud_anchor_on ? hud_dx.load(std::memory_order_relaxed) : 0.0f;
+    const float dy = hud_anchor_on ? hud_dy.load(std::memory_order_relaxed) : 0.0f;
+    if (dx == 0.0f && dy == 0.0f && applied_dx == 0.0f && applied_dy == 0.0f) {
+        return; // 16:9: nothing to move
+    }
+    bool all_known = true;
+    for (const HudItem& item : hud_items) all_known = all_known && item.known;
+    // Rechecked every half second: the game may put a group back itself.
+    if (dx == applied_dx && dy == applied_dy && all_known && ++frames % 32 != 0) {
+        return;
+    }
+    if (!GfxIsObject(root)) {
+        return;
+    }
+    GfxValue player;
+    GfxGet(root, "PlayerHUD", player);
+    for (HudItem& item : hud_items) {
+        GfxValue clip;
+        if (!GfxGet(item.parent ? player : root, item.name, clip) || !GfxIsObject(clip)) {
+            GfxRelease(clip);
+            continue;
+        }
+        double x = 0, y = 0;
+        if (GfxGetNumber(clip, "x", x) && GfxGetNumber(clip, "y", y)) {
+            // Positions are in twips (1/20 pixel): a read back is that close.
+            const auto moved = [](double a, double b) { return std::abs(a - b) > 0.06; };
+            if (!item.known || moved(x, item.set_x) || moved(y, item.set_y)) {
+                item.base_x = x; // first seen, or moved by the game since
+                item.base_y = y;
+                item.known = true;
+            }
+            const double nx = item.base_x + item.fx * dx, ny = item.base_y + item.fy * dy;
+            if (moved(nx, x)) GfxSetNumber(clip, "x", nx);
+            if (moved(ny, y)) GfxSetNumber(clip, "y", ny);
+            double check_x = nx, check_y = ny;
+            GfxGetNumber(clip, "x", check_x);
+            GfxGetNumber(clip, "y", check_y);
+            item.set_x = check_x;
+            item.set_y = check_y;
+        }
+        GfxRelease(clip);
+    }
+    GfxRelease(player);
+    applied_dx = dx;
+    applied_dy = dy;
+}
+
+bool InstallUiHooks() {
+    // Both functions start with push rbp; mov rbp, rsp; push r15.
+    static constexpr std::array<u8, 6> entry = {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57};
+    if (const char* env = std::getenv("BB_HUD_ANCHOR"); env && env[0] == '0') hud_anchor_on = false;
+    return Hook(0x1f510, entry, 0, ViewportAdjust) & Hook(0x1bf9e10, entry, 0, HudFrame);
+}
+
+// Yebis's blur-kernel sample parameters (0xbbc3e0): the base sample count (edi) must be at least
+// 3 (an assertion the retail build has compiled out). Game data now and then gives 2; the function
+// then runs on in a state that does not end (the guest stops submitting: a black screen), so the
+// count is raised to 3 at the entry. BB_KERNEL_CLAMP=0: not installed.
+void PS4_SYSV_ABI KernelSampleClamp(u64, const Core::GuestRegisterSnapshot* r) {
+    if (std::int32_t(r->rdi) < 3) {
+        const_cast<Core::GuestRegisterSnapshot*>(r)->rdi = (r->rdi & ~u64(0xffffffff)) | 3;
+    }
+}
+
+bool InstallKernelSampleClamp() {
+    if (const char* env = std::getenv("BB_KERNEL_CLAMP"); env && env[0] == '0') {
+        return false;
+    }
+    static constexpr std::array<u8, 6> entry = {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57};
+    return Hook(0xbbc3e0, entry, 0, KernelSampleClamp);
+}
 } // namespace
 
 void ApplyGameEffects() {
@@ -316,6 +615,35 @@ bool HotEffects() {
     return hot_effects.load(std::memory_order_relaxed);
 }
 
+void SetDisplayAspect(float aspect) {
+    constexpr float game = 16.0f / 9.0f;
+    const bool other = aspect > 0.5f && aspect < 8.0f && std::abs(aspect - game) > 0.001f;
+    std::uint32_t bits = 0, fov = 0;
+    float kx = 1.0f, ky = 1.0f; // the markers' scale: the UI is as high (wide) as the output
+    if (other) {
+        std::memcpy(&bits, &aspect, 4);
+        if (aspect < game) {
+            ky = game / aspect;
+            std::memcpy(&fov, &ky, 4);
+        } else {
+            kx = aspect / game;
+        }
+    }
+    camera_aspect_bits.store(bits, std::memory_order_relaxed);
+    camera_fov_scale.store(fov, std::memory_order_relaxed);
+    // The HUD's groups: as far as the output's edge is from the 16:9 middle (the HUD's pixels).
+    hud_dx.store(960.0f * (kx - 1.0f), std::memory_order_relaxed);
+    hud_dy.store(540.0f * (ky - 1.0f), std::memory_order_relaxed);
+    gfx_pixel_aspect.store(other ? aspect / game : 1.0f, std::memory_order_relaxed);
+    marker_kx.store(kx, std::memory_order_relaxed);
+    marker_ky.store(ky, std::memory_order_relaxed);
+    UpdateMarkerScales();
+    std::printf("Display: aspect ratio %.3f (%s)\n", double(aspect),
+                other ? (aspect > game ? "wider than 16:9: the camera sees more to the sides"
+                                       : "taller than 16:9: the camera sees more above and below")
+                      : "the game's");
+}
+
 void PatchImage(unsigned char* image, std::uint64_t) {
     // BB_GAME_HOOKS=0 (comparisons): none of bbport 0.6's game hooks.
     if (const char* env = std::getenv("BB_GAME_HOOKS"); env && env[0] == '0') {
@@ -323,9 +651,18 @@ void PatchImage(unsigned char* image, std::uint64_t) {
         return;
     }
     image_base = reinterpret_cast<u64>(image);
-    std::printf("Game hooks: render job slots %s; render resource cache %s; effects %s\n",
+    near_data = static_cast<NearData*>(bb_low_map(sizeof(NearData), PROT_READ | PROT_WRITE));
+    if (near_data) new (near_data) NearData{};
+    std::printf("Game hooks: render job slots %s; render resource cache %s; effects %s; blur-kernel "
+                "clamp %s\n",
                 InstallJobSlotFix() ? "given back" : "not installed",
                 InstallResourceCacheSize() ? "in the port's memory" : "not installed",
-                InstallHotEffects() ? "switched live" : "at start (patches)");
+                InstallHotEffects() ? "switched live" : "at start (patches)",
+                InstallKernelSampleClamp() ? "on" : "not installed");
+    const int camera = InstallCameraAspectHooks(), markers = InstallMarkerHooks();
+    const bool ui = InstallUiHooks();
+    std::printf("Game hooks: the output's aspect ratio: the camera at %d of %zu places, the HUD's "
+                "markers at %d of %zu, the UI %s\n", camera, CameraParamStores.size(), markers,
+                MarkerSites.size(), ui ? "fills the output (HUD at its edges)" : "in the middle");
 }
 } // namespace BbGameHooks

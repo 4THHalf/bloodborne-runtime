@@ -11,7 +11,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 # Dotted paths in the launcher's files: a text, or a group whose texts are all copied.
 PATHS = [
-    "graphics.title", "graphics.display", "graphics.frameRate", "graphics.upscaling", "graphics.upscalingHint",
+    "graphics.title", "graphics.display", "graphics.aspectRatio", "graphics.aspectRatioHint", "graphics.aspectAuto", "graphics.frameRate", "graphics.upscaling", "graphics.upscalingHint",
     "graphics.detail", "graphics.effects", "graphics.effectsHint", "graphics.outputRes", "graphics.fullscreen",
     "graphics.memory", "graphics.memoryHint", "graphics.memoryHigh",
     "graphics.monitor", "graphics.monitorHint", "graphics.monitorMain", "graphics.presentMode",

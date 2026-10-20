@@ -568,7 +568,8 @@ void FpsLimitSetting() {
 /// (bloodborne-launcher src/lib/data/memory.ts): keep the two in step.
 void MemoryEstimate() {
     const auto& s = BbSettings::Get();
-    int w = BbSettings::OutputWidths[s.output_res], h = BbSettings::OutputHeights[s.output_res];
+    const auto out = BbSettings::CurrentOutput();
+    int w = out.width, h = out.height;
     bool patched = false;
     if (s.upscaler != BbSettings::UpscalerTaa && s.live_resolution != 1) {
         const float scale = s.upscaler == BbSettings::UpscalerOff ? 1.0f : BbSettings::PresetScale(s.preset);
@@ -606,13 +607,31 @@ void GraphicsTab() {
     auto& s = BbSettings::Get();
     const bool launcher = BbSettings::LauncherChannel();
     if (BeginCard("##display", LT("graphics.display"))) {
-        static const char* outputs[] = {"1280 × 720", "1920 × 1080", "2560 × 1440", "3840 × 2160"};
-        static_assert(sizeof(outputs) / sizeof(outputs[0]) == BbSettings::OutputCount);
-        int output = s.output_res;
+        // The aspect ratio, then its outputs (bbport 0.6): another ratio keeps the height.
+        static const char* aspects[BbSettings::AspectCount] = {};
+        aspects[0] = LT("graphics.aspectAuto");
+        for (int a = 1; a < BbSettings::AspectCount; ++a) aspects[a] = BbSettings::AspectKey(a);
+        int aspect = s.aspect;
+        if (Choice(LT("graphics.aspectRatio"), aspects, BbSettings::AspectCount, &aspect,
+                   LT("graphics.aspectRatioHint"), true)) {
+            const auto kept = BbSettings::NearestOutput(aspect, BbSettings::CurrentOutput());
+            Store(s.aspect, aspect, true);
+            Store(s.output_res, BbSettings::PackSize(kept), true);
+        }
+        const auto list = BbSettings::Outputs(s.aspect);
+        static std::array<std::string, 12> texts;
+        static std::array<const char*, 12> outputs{};
+        for (int i = 0; i < list.count; ++i) {
+            texts[i] = std::to_string(list.sizes[i].width) + " × " + std::to_string(list.sizes[i].height);
+            outputs[i] = texts[i].c_str();
+        }
+        int output = std::max(0, list.IndexOf(BbSettings::CurrentOutput()));
         const bool output_changed =
-            Choice(LT("graphics.outputRes"), outputs, BbSettings::OutputCount, &output,
-                   T(BbSettings::FixedRenderSession() ? "output.fixedHint" : "output.liveHint"), true);
-        Store(s.output_res, output, output_changed);
+            Choice(LT("graphics.outputRes"), outputs.data(), list.count, &output,
+                   T(BbSettings::FixedRenderSession() ? "output.fixedHint" : "output.liveHint"));
+        if (output_changed) {
+            Store(s.output_res, BbSettings::PackSize(list.sizes[output]), true);
+        }
         MemoryEstimate();
         if (launcher) {
             MonitorChoice();
@@ -1105,14 +1124,14 @@ void FpsCounter() {
                            : s.upscaler == BbSettings::UpscalerTaa    ? "TAA"
                            : s.upscaler == BbSettings::UpscalerDlss   ? "DLSS"
                                                                       : nullptr;
-    const int output = s.output_res;
+    const auto output = BbSettings::CurrentOutput();
     // What runs it: the GPU path and the CPU path.
     ImGui::Text("%s  ·  %s", RendererName(), CpuName());
     if (upscaler) {
         ImGui::Text("%s  %d x %d > %d x %d", upscaler, s.active_render_width.load(), s.active_render_height.load(),
-                    BbSettings::OutputWidths[output], BbSettings::OutputHeights[output]);
+                    output.width, output.height);
     } else {
-        ImGui::Text("%d x %d", BbSettings::OutputWidths[output], BbSettings::OutputHeights[output]);
+        ImGui::Text("%d x %d", output.width, output.height);
     }
     ImGui::PopStyleColor();
     // Frame times, newest on the right: bars above 1.5x the average in amber, 2x+ in red.

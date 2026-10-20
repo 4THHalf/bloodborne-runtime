@@ -571,7 +571,9 @@ const GraphicsPipeline* PipelineCache::GetGraphicsPipeline(const DrawIndirectPar
         return nullptr;
     }
     if (const auto found = graphics_pipelines.find(sel.graphics_key); found != graphics_pipelines.end()) {
-        return found->second.get();
+        // One the driver could not create stays empty: its draws are skipped every time, not
+        // only the first (binding it crashed MoltenVK).
+        return found->second && found->second->Handle() ? found->second.get() : nullptr;
     }
     // bbport BB_ASYNC_PIPELINES: being compiled on a worker, or to be.
     const bool skippable = AsyncSkippable(sel, indirect);
@@ -680,7 +682,7 @@ const GraphicsPipeline* PipelineCache::FinishPipeline(const GraphicsPipelineKey&
     }
     auto& slot = graphics_pipelines[key];
     slot = std::move(job.pipeline);
-    return slot.get();
+    return slot && slot->Handle() ? slot.get() : nullptr;
 }
 
 bool PipelineCache::AsyncSkippable(const PipelineSelection& selection, bool indirect) {

@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
+#include "bbport_game_hooks.h"
 #include "video_core/renderer_vulkan/vk_temporal_upscaler.h"
 #include "video_core/renderer_vulkan/vk_gpu_profiler.h"
 #include "video_core/renderer_vulkan/motion_history.h"
@@ -333,8 +334,10 @@ bool TemporalUpscaler::OnFrameStart() {
                 value < BbSettings::PresetCount) {
                 BbSettings::Get().preset.store(value);
             }
-            if (fields >= 2 && output >= 0 && output < BbSettings::OutputCount) {
-                BbSettings::Get().output_res.store(output);
+            // The output: its number in the current aspect ratio's list.
+            const auto outputs = BbSettings::Outputs(BbSettings::Get().aspect);
+            if (fields >= 2 && output >= 0 && output < outputs.count) {
+                BbSettings::Get().output_res.store(BbSettings::PackSize(outputs.sizes[output]));
             }
             if (fields == 3 && provider >= 0 && provider < BbSettings::UpscalerCount) {
                 BbSettings::Get().upscaler.store(provider);
@@ -353,14 +356,21 @@ bool TemporalUpscaler::OnFrameStart() {
     const bool active = Active();
     const bool jitter_on = active && settings.jitter && !BbToggle::Disabled(1u << 25);
     const int upscaler = settings.upscaler.load();
-    const int output = settings.output_res.load();
+    const auto output_size = BbSettings::CurrentOutput();
+    const u32 output = BbSettings::PackSize(output_size);
     const bool output_changed = !scaled_session && applied_output != output;
     if (output_changed) {
-        target_width = BbSettings::OutputWidths[output];
-        target_height = BbSettings::OutputHeights[output];
+        target_width = u32(output_size.width);
+        target_height = u32(output_size.height);
         std::printf("Output resolution: %ux%u (live)\n", target_width, target_height);
         failed = false;
         fsr4_failed = false;
+    }
+    // The game's camera, HUD markers and UI follow the output's aspect ratio (bbport_game_hooks).
+    if (const float aspect = enabled ? float(target_width) / float(target_height) : 16.0f / 9.0f;
+        aspect != applied_aspect) {
+        applied_aspect = aspect;
+        BbGameHooks::SetDisplayAspect(aspect);
     }
     const bool changed = output_changed || applied_preset != preset || active != last_active ||
                          jitter_on != last_jitter || applied_upscaler != upscaler;

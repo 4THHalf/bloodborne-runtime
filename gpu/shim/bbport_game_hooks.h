@@ -12,4 +12,6 @@ void PatchImage(unsigned char* image, std::uint64_t size);
 void ApplyGameEffects();
 /// Whether effects are switched live (else they are patches at start and need a restart).
 bool HotEffects();
+/// The output's aspect ratio: the camera, the HUD's markers and the UI follow it (16:9: the game's).
+void SetDisplayAspect(float aspect);
 } // namespace BbGameHooks

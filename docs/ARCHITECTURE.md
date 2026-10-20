@@ -88,6 +88,8 @@ runs is excluded from the recompiled library.
 |---|---|---|
 | Frame rate | Above 30 FPS the game's frame pacer and main loop step by each frame's real time, and 48 places tied to a 30 FPS frame follow it (physics timers, damping, cloth, the run's wall check). The limit applies live; **F3** toggles 30 FPS. | `BB_FRAME_HOOKS=0` (the community patches instead) |
 | Effects | Chromatic aberration, depth of field, motion blur, SSAO (only where the game has its target), the game's anti-aliasing, dynamic-light shadows and bloom switch without a restart. Screen-space reflections stay a patch at start. | `BB_HOT_EFFECTS=0` |
+| Aspect ratio | On an output that is not 16:9 the camera's aspect ratio follows it (wider sees more to the sides, taller more above and below), the HUD's markers stay over their characters, the UI's viewport has the output's shape and the HUD's groups move to the edges (Scaleform members set through the game's own functions). Full-screen UI fills reach the output's edges (a vertex-shader snap, `EmitUiEdgeStretch`). | `BB_HUD_ANCHOR=0` (HUD in the middle) |
+| Blur-kernel clamp | The blur kernel's base sample count raised to 3 (2 stalled the game: a black screen). | `BB_KERNEL_CLAMP=0` |
 | Laurence's cinematic | Failed render jobs give their pool slot back; the render resource cache gets 512 MiB of the runtime's memory instead of 160 MiB. Above 30 FPS the cinematic hung or lost models without these. | `BB_JOB_SLOT_FIX=0`, `BB_RENDER_RESOURCE_CACHE_MB=160` |
 | Resource copies | The GPU side hears of the game's resource uploads (new memory model only). | `BB_GUEST_HOOKS=0` |
 
@@ -113,7 +115,7 @@ uses a window where its offset is below 4 GiB (`BB_POOL_SPLIT=0`: one import). G
 in a Metal residency set (`gpu/shim/bbport_metal_residency.*`); removed ones are kept until the
 GPU has finished every submission that could use them.
 
-**Resolution and upscaling.** The game renders at 1920×1080 internally. With an upscaler preset,
+**Resolution and upscaling.** The output has an aspect ratio (16:9 by default; 4:3, 16:10, 21:9, 32:9 or Auto, the monitor's) and a size from that ratio's list (`aspect_ratio`, `output_res`). The game renders at 1920×1080 internally. With an upscaler preset,
 a patch at start makes the whole game render smaller (for example 1130×636 for Balanced at 1080p)
 and AMD FSR 3.1 reconstructs the output resolution; the game's UI is drawn at the output size.
 The other route, live resolution, keeps the game at 1920×1080 and scales the renderer's targets

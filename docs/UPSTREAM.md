@@ -31,7 +31,8 @@ The compatibility level imported from bbport is **0.51**, plus the 0.6 items bel
 | Game-code hooks (`InstallGuestCodeHook`) | Ported as an interface; our implementation runs its stubs in bbcpu |
 | Laurence's cinematic above 30 FPS (job slots, 512 MiB render cache) | Ported (`bbport_game_hooks.cpp`) |
 | Effects switched live (with bloom, a new setting), SSAO only where the game has its target, SSR at start | Ported |
-| Aspect ratios through hooks (camera, HUD, markers); keyboard and mouse (mouse camera, menu pointer, Dark Souls III layout, button prompts) | Planned |
+| Aspect ratios through hooks (camera, HUD, markers, UI viewport), the UI edge stretch and its 21:9 streak fix, the blur-kernel clamp | Ported (16:9 stays the default: Auto would change a player's output by itself) |
+| Keyboard and mouse (mouse camera, menu pointer, Dark Souls III layout, button prompts) | Planned |
 | Online on shadPS4 0.20's network code (Seamless Hunt with BBSC co-op, The Hunter's Dream) | Planned |
 | The new memory model, NVIDIA/Intel/VRAM fixes, FSR 4.1.1, Steam Deck, AppImage | Not applicable (unified memory, Apple GPUs, macOS) |
 

@@ -49,6 +49,11 @@ bool InstallGuestCodeHook(void* address, std::span<const std::uint8_t> expected_
                           std::uint64_t tag, GuestCodeHook hook,
                           const std::uint8_t* skip_flag = nullptr);
 
+/// The same, but the hook runs after the replaced instructions (it sees what they stored). Not in
+/// bbport's interface: bloodborne-runtime's, for observers that adjust a store.
+bool InstallGuestCodeHookAfter(void* address, std::span<const std::uint8_t> expected_instructions,
+                               std::uint64_t tag, GuestCodeHook hook);
+
 /// The protection the game's code goes back to after the port patches it: read and execute, or
 /// read, write and execute once a game module writes its own code (BBSC's byte patches, some
 /// switched while the game runs) and calls KeepGuestCodeWritable.

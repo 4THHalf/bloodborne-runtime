@@ -5,7 +5,9 @@
 
 #pragma once
 
+#include <array>
 #include <atomic>
+#include <cstdint>
 #include <string>
 
 namespace BbSettings {
@@ -54,11 +56,45 @@ inline constexpr int EffectCount = int(sizeof(Effects) / sizeof(Effects[0]));
 enum EffectIndex : int { EffectSsr = 6, EffectBloom = 7, GameEffectCount = 8, EffectSkipIntro = 8,
                          EffectDebugCamera = 9, EffectDebugMenu = 10 };
 static_assert(EffectCount == 11);
-/// Live output resolutions: the upscaler's output and the UI host targets.
-inline constexpr int OutputWidths[] = {1280, 1920, 2560, 3840};
-inline constexpr int OutputHeights[] = {720, 1080, 1440, 2160};
-inline constexpr int OutputCount = 4;
-inline constexpr int OutputDefault = 1; ///< 1920x1080, the game's own size
+/// Output aspect ratios, and the output resolutions of each: the upscaler's output and the UI's
+/// targets. For another aspect ratio than 16:9 the game's camera, HUD markers and UI placement
+/// follow the output (bbport_game_hooks, the UI composition). Auto: the group of the monitor the
+/// game is on. From bbport 0.6 (8185b88, deadinside28/bloodborne_pc).
+enum Aspect : int { AspectAuto = 0, Aspect4x3, Aspect16x10, Aspect16x9, Aspect21x9, Aspect32x9, AspectCount };
+struct OutputSize {
+    int width = 1920, height = 1080;
+    bool operator==(const OutputSize&) const = default;
+};
+inline constexpr OutputSize OutputDefault{1920, 1080}; ///< the game's own size
+constexpr std::uint32_t PackSize(OutputSize s) {
+    return std::uint32_t(s.width) | std::uint32_t(s.height) << 16;
+}
+constexpr OutputSize UnpackSize(std::uint32_t v) {
+    return {int(v & 0xffff), int(v >> 16)};
+}
+/// An aspect ratio's outputs, smallest first.
+struct OutputList {
+    std::array<OutputSize, 12> sizes{};
+    int count = 0;
+    const OutputSize* begin() const { return sizes.data(); }
+    const OutputSize* end() const { return sizes.data() + count; }
+    int IndexOf(OutputSize size) const; ///< -1: not in the list
+};
+/// bbport.ini value ("auto", "4:3", "16:10", "16:9", "21:9", "32:9").
+const char* AspectKey(int aspect);
+/// The monitor the game's window is on (window.cpp): Auto follows it. 0x0 until known.
+void SetMonitor(int width, int height);
+OutputSize Monitor();
+/// Auto resolved to the group nearest the monitor's aspect ratio (16:9 until it is known).
+int ResolvedAspect(int aspect);
+/// The output resolutions of an aspect ratio (Auto: the monitor's group and its own size).
+OutputList Outputs(int aspect);
+/// The output of `aspect` nearest `size` in height: another aspect ratio keeps the height.
+OutputSize NearestOutput(int aspect, OutputSize size);
+/// The output in use: the chosen resolution in the chosen aspect ratio.
+OutputSize CurrentOutput();
+/// "2560x1080".
+std::string SizeText(OutputSize size);
 
 struct Values {
     std::atomic<MenuLanguage> menu_language{MenuLanguage::Russian};
@@ -92,7 +128,9 @@ struct Values {
     /// Applied at start (patches.py); the menu shows when a restart is needed.
     std::atomic<bool> effects[EffectCount]{};
     std::atomic<int> model_lod{0}; ///< -2 highest .. 2 lowest, 0 the game's
-    std::atomic<int> output_res{OutputDefault}; ///< index into OutputWidths
+    std::atomic<std::uint32_t> output_res{PackSize(OutputDefault)}; ///< PackSize
+    /// 16:9 unless chosen: Auto would change a player's output to the monitor's shape by itself.
+    std::atomic<int> aspect{Aspect16x9};
     /// Live resolution and preset changes (run.sh): 0 off by default (startup patch, fastest
     /// on the Steam Deck and older GPUs), -1 auto (strong discrete GPUs), 1 on. On restart.
     std::atomic<int> live_resolution{0};
@@ -113,7 +151,7 @@ struct Values {
 #endif
     bool startup_effects[EffectCount]{};
     int startup_model_lod = 0;
-    int startup_output_res = OutputDefault;
+    std::uint32_t startup_output_res = PackSize(OutputDefault);
     int startup_live_resolution = 0;
 };
 
