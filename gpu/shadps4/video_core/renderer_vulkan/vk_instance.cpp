@@ -14,6 +14,9 @@
 #include "video_core/renderer_vulkan/liverpool_to_vk.h"
 #include "bbport_toggles.h"
 #include "bbport_metal_residency.h"
+#ifdef BB_METAL_BACKEND
+#include "video_core/renderer_metal/mtl_vk_layer.h"
+#endif
 #include "video_core/renderer_vulkan/vk_dlss.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_platform.h"
@@ -731,11 +734,19 @@ bool Instance::CreateDevice() {
     device = std::move(dev);
 
     VULKAN_HPP_DEFAULT_DISPATCHER.init(*device);
+#ifdef BB_METAL_BACKEND
+    // The Metal backend's layer over the command functions (renderer_metal/mtl_vk_layer.h): it
+    // installs only with BB_METAL_TRACE, BB_METAL_PRESENT or BB_METAL_FRAME; MoltenVK otherwise.
+    MetalLayer::Install(&VULKAN_HPP_DEFAULT_DISPATCHER);
+#endif
     if (Dlss* dlss = Dlss::Get()) {
         dlss->Initialize(*instance, physical_device, *device);
     }
 
     graphics_queue = device->getQueue(queue_family_index, 0);
+#ifdef BB_METAL_BACKEND
+    MetalLayer::SetDevice(static_cast<VkDevice>(*device), static_cast<VkQueue>(graphics_queue));
+#endif
     present_queue = device->getQueue(queue_family_index, 0);
     if (readback_family_index != NoFamily) {
         readback_queue = device->getQueue(readback_family_index, 0);

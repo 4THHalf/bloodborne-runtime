@@ -89,7 +89,7 @@ advance the renderer migration.
 | N2 · shaders ahead of time | 0% `░░░░░░░░░░░░░░░░░░░░` | Inventory shader variants |
 | N3 · textures as objects | 0% `░░░░░░░░░░░░░░░░░░░░` | Trace texture creation sites |
 | N4 · backend interface | 10% `██░░░░░░░░░░░░░░░░░░` | Paused: opening-video stability |
-| N5 · Metal backend | 10% `██░░░░░░░░░░░░░░░░░░` | Every pipeline builds in Metal (shadow); next: the present pass |
+| N5 · Metal backend | 35% `███████░░░░░░░░░░░░░` | The frame draws through Metal (`BB_METAL_FRAME=1`); next: resources in Metal |
 | N6 · engine render boundary | 0% `░░░░░░░░░░░░░░░░░░░░` | Map engine calls after R4 |
 
 N1 decisions:
@@ -427,9 +427,27 @@ failure. Nothing is drawn with them. A 60-second copied-save run (Hunter's Dream
 with the cache warm-up) built 465 graphics pipelines (15 rect lists, 17 tessellated, no geometry
 shaders met) and 35 compute pipelines, with 0 failures, at 57.6 FPS.
 
-Next, in the fork's order and each behind a switch with MoltenVK as the fallback: the present
-pass through a Metal encoder, then the frame's commands, then resources; each measured against
-MoltenVK on our build.
+**The frame through Metal** (from the fork's `78b59f5`, the last version of its layer approach):
+`mtl_vk_layer` replaces the command-buffer and submission functions in vulkan.hpp's dispatcher,
+so the renderer above it is unchanged and Linux keeps real Vulkan. For a command buffer the Metal
+path owns, `mtl_frame` encodes Metal itself: render passes, draws (rect lists as the rewritten
+triangles, tessellated draws through Metal's tessellator), dispatches, copies, clears and blits,
+with push descriptors bound to the shaders' slots. Every other command buffer goes to MoltenVK.
+`BB_METAL_PRESENT=1` owns only the present pass; `BB_METAL_FRAME=1` owns every command buffer.
+Resources are still MoltenVK's (images, buffers, memory), reached through `VK_EXT_metal_objects`,
+and the commands go on MoltenVK's own queue. The shadow (`mtl_shadow.mm`) now builds the game's
+pipelines through `PipelineFactory`, keeps them by Vulkan pipeline handle for the frame path, and
+translates the host passes' pipelines from their Vulkan create infos.
+
+Two alternating 60-second pairs at the same place (Hunter's Dream, copied save, 1080p with FSR
+Balanced, M3 Pro): MoltenVK 58.0 and 58.1 FPS (p90 20.4 and 18.9 ms), the Metal frame path 65.5
+and 61.7 FPS (p90 16.3 and 17.6 ms). Stage-B recording cost rose slightly: 5.18 and 5.06 µs per
+draw on MoltenVK against 5.59 and 5.27 on Metal. All four runs completed without faults; the frame
+path logged 0 draws without a Metal pipeline and 0 unsupported commands, and a frame capture
+showed the same picture. The FPS counter's big size names the renderer (Metal, MoltenVK, Vulkan).
+
+Next: resources created in Metal (images, buffers, the guest-memory pool), then MoltenVK can be
+left out on macOS; each step behind a switch and measured against MoltenVK on our build.
 
 ### Upstream bbport merges
 

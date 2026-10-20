@@ -14,6 +14,9 @@
 #include "video_core/renderer_vulkan/vk_platform.h"
 #include "bbport_game_menu.h"
 #include "bbport_overlay.h"
+#ifdef BB_METAL_BACKEND
+#include "video_core/renderer_metal/mtl_vk_layer.h"
+#endif
 #include "bbport_timeline.h"
 #include "video_core/renderer_vulkan/vk_temporal_upscaler.h"
 #include "video_core/renderer_vulkan/vk_presenter.h"
@@ -695,6 +698,13 @@ void Presenter::Present(Frame* frame, bool is_reusing_frame, bool is_game_frame)
     const vk::Image swapchain_image = swapchain.Image();
     auto& scheduler = present_scheduler;
     const auto cmdbuf = scheduler.CommandBuffer();
+#ifdef BB_METAL_BACKEND
+    // The Metal backend (BB_METAL_PRESENT=1): this pass is encoded in Metal, except when the
+    // overlay draws (ImGui still records Vulkan).
+    if (MetalLayer::PresentEnabled() && !BbOverlay::Visible()) {
+        MetalLayer::Own(static_cast<VkCommandBuffer>(cmdbuf));
+    }
+#endif
     DumpFinalFrameIfDue(instance, scheduler, cmdbuf, frame->image, frame->width, frame->height,
                         swapchain.GetSurfaceFormat().format);
 

@@ -17,6 +17,9 @@
 #include <SDL3/SDL.h>
 #include "bbport_settings.h"
 #include "bbport_text.h"
+#ifdef BB_METAL_BACKEND
+#include "video_core/renderer_metal/mtl_vk_layer.h"
+#endif
 #include "imgui.h"
 #include "imgui_impl_vulkan.h"
 #include "imgui_internal.h"
@@ -994,6 +997,17 @@ void Menu() {
     }
 }
 
+/// What draws the frame: the Metal backend's frame path (BB_METAL_FRAME=1), MoltenVK, or Vulkan.
+const char* RendererName() {
+#ifdef BB_METAL_BACKEND
+    return MetalLayer::FrameEnabled() ? "Metal" : "MoltenVK";
+#elif defined(__APPLE__)
+    return "MoltenVK";
+#else
+    return "Vulkan";
+#endif
+}
+
 /// The FPS counter, where the player put it. Small: the frame rate, colored by how healthy it is,
 /// and the frame time on one line. Big: also the upscaler and resolutions, and a graph of the
 /// last frame times (stutters stand out). Fixed widths, so it never moves as the numbers change.
@@ -1041,7 +1055,11 @@ void FpsCounter() {
     if (big) {
         ImGui::AlignTextToFramePadding();
     }
-    ImGui::Text("FPS  %.1f ms", frame_ms_avg);
+    if (big) {
+        ImGui::Text("FPS  %.1f ms  %s", frame_ms_avg, RendererName());
+    } else {
+        ImGui::Text("FPS  %.1f ms", frame_ms_avg);
+    }
     if (!big) {
         ImGui::PopStyleColor();
         ImGui::End();

@@ -1,33 +1,57 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// The Metal shadow check (R5 N5, docs/NATIVE_RENDERER.md): with BB_METAL_SHADOW=1, every pipeline
-// the Vulkan renderer creates is also built as Metal pipeline states, from the same key and SPIR-V,
-// through the Metal backend's PipelineFactory; the log counts what built and why the rest did not.
-// Nothing is drawn with them: MoltenVK stays the renderer. The approach is Wooloomooloo2/
-// bloodborne_mac_port's M1 shadow builder (its docs/DESIGN_METAL_BACKEND.md).
+// From Wooloomooloo2/bloodborne_mac_port (78b59f5, GPL-2.0-or-later), adapted to bloodborne-runtime.
+// bbport: the Metal pipelines the shadow builder made (mtl_shadow.mm), by Vulkan pipeline handle,
+// for the Metal frame path (mtl_vk_layer.mm).
 
 #pragma once
 
-#include <span>
-#include "common/types.h"
-#include "video_core/renderer_vulkan/vk_graphics_pipeline.h"
+#include <array>
+#include "video_core/renderer_vulkan/vk_common.h"
 
-namespace Metal::Shadow {
+namespace Metal {
+struct RenderPipeline;
+struct ComputePipeline;
+struct TessellationPipeline;
+struct GeometryPipeline;
+struct DepthStencilKey;
+} // namespace Metal
 
-/// BB_METAL_SHADOW=1.
-bool Enabled();
+namespace MetalShadow {
 
-/// A Vulkan shader module was created from `spirv` (what the Metal one is compiled from).
-void NoteModule(vk::ShaderModule module, std::span<const u32> spirv);
+/// State a generic (host-side) pipeline fixes at creation; the game's pipelines set it all
+/// dynamically.
+struct FixedState {
+    bool cull{}, front_face{}, depth{}, stencil{}, depth_bias{}; ///< these are not dynamic
+    VkCullModeFlags cull_mode{};
+    VkFrontFace front{};
+    bool depth_test{}, depth_write{};
+    VkCompareOp depth_compare{VK_COMPARE_OP_ALWAYS};
+    bool stencil_test{};
+    bool depth_bias_enable{};
+};
 
-/// A Vulkan graphics pipeline was created: builds its Metal pipeline states. `sdata` holds its
-/// vertex inputs (in the fetch shader's order).
-void Graphics(const Vulkan::GraphicsPipelineKey& key,
-              std::span<const vk::ShaderModule, Vulkan::MaxShaderStages> modules,
-              std::span<const Shader::Info* const, Vulkan::MaxShaderStages> infos,
-              const Vulkan::GraphicsPipeline::SerializationSupport& sdata,
-              bool clip_emulation_fragment);
+struct GraphicsEntry {
+    const Metal::RenderPipeline* render{};     ///< null: no Metal pipeline (the draw is skipped)
+    const Metal::TessellationPipeline* tess{}; ///< a tessellated draw's pipelines
+    const Metal::GeometryPipeline* geometry{}; ///< a geometry-shader draw's pipelines
+    bool rect_list{};                          ///< the vertex shader is the rect list rewrite
+    bool generic{};                            ///< built from a Vulkan create info (host passes)
+    FixedState fixed;                          ///< generic pipelines: their static state
+    std::array<u32, 32> strides{};             ///< generic pipelines: vertex binding strides
+};
 
-/// A Vulkan compute pipeline was created: builds its Metal pipeline state.
-void Compute(const Vulkan::ComputePipelineKey& key, vk::ShaderModule module);
+/// Null when the Vulkan pipeline has no Metal counterpart (yet).
+const GraphicsEntry* FindGraphics(VkPipeline pipeline);
+const Metal::ComputePipeline* FindCompute(VkPipeline pipeline);
+void Forget(VkPipeline pipeline);
+/// Pipelines made outside the game's pipeline cache (host passes, detiling, copies): built from
+/// their Vulkan create infos. Not while GraphicsPipeline/ComputePipeline create theirs (GameBuildScope,
+/// vk_metal_shadow.h): those come through Graphics/Compute with their keys.
+void ModuleCreated(VkShaderModule module, const VkShaderModuleCreateInfo* info);
+void GraphicsCreated(const VkGraphicsPipelineCreateInfo* info, VkPipeline pipeline);
+void ComputeCreated(const VkComputePipelineCreateInfo* info, VkPipeline pipeline);
 
-} // namespace Metal::Shadow
+/// id<MTLDepthStencilState> for the key (the pipeline cache's), null on failure.
+void* DepthStencil(const Metal::DepthStencilKey& key);
+
+} // namespace MetalShadow

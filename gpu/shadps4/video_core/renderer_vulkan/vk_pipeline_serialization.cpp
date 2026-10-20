@@ -10,9 +10,7 @@
 #include "shader_recompiler/frontend/fetch_shader.h"
 #include "shader_recompiler/info.h"
 #include "video_core/cache_storage.h"
-#ifdef BB_METAL_BACKEND
-#include "video_core/renderer_metal/mtl_shadow.h"
-#endif
+#include "video_core/renderer_vulkan/vk_metal_shadow.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_pipeline_cache.h"
 #include "video_core/renderer_vulkan/vk_shader_util.h"
@@ -178,12 +176,16 @@ bool PipelineCache::LoadComputePipeline(Serialization::Archive& ar) {
 
     // bbport: built before it is inserted: a pipeline the driver rejects while preloading throws
     // (Serialization::CorruptData) and leaves no empty entry behind.
-    auto pipeline =
-        std::make_unique<ComputePipeline>(instance, scheduler, desc_heap, profile, *pipeline_cache,
-                                          compute_key, *sel.infos[0], sel.modules[0], sdata, true);
-#ifdef BB_METAL_BACKEND
-    Metal::Shadow::Compute(compute_key, sel.modules[0]);
-#endif
+    std::unique_ptr<ComputePipeline> pipeline;
+    {
+        MetalShadow::GameBuildScope game_build;
+        pipeline = std::make_unique<ComputePipeline>(instance, scheduler, desc_heap, profile,
+                                                     *pipeline_cache, compute_key, *sel.infos[0],
+                                                     sel.modules[0], sdata, true);
+    }
+    if (MetalShadow::Enabled()) {
+        MetalShadow::Compute(compute_key, sel.modules[0], pipeline->Handle());
+    }
     const auto [it, is_new] = compute_pipelines.try_emplace(compute_key);
     ASSERT(is_new);
     it.value() = std::move(pipeline);
@@ -267,14 +269,15 @@ bool PipelineCache::LoadGraphicsPipeline(Serialization::Archive& ar) {
         }
     }
 
-    auto pipeline = std::make_unique<GraphicsPipeline>(
-        instance, scheduler, desc_heap, profile, sel.graphics_key, *pipeline_cache, sel.infos,
-        sel.runtime_infos, sel.fetch_shader, sel.modules, sdata, true);
-#ifdef BB_METAL_BACKEND
-    Metal::Shadow::Graphics(sel.graphics_key, sel.modules, sel.infos, sdata,
-                            sel.runtime_infos[u32(Shader::SwStage::Fragment)].hw.fs.clip_distance_emulation &&
-                                !sel.infos[u32(Shader::SwStage::Fragment)]);
-#endif
+    std::unique_ptr<GraphicsPipeline> pipeline;
+    {
+        MetalShadow::GameBuildScope game_build;
+        pipeline = std::make_unique<GraphicsPipeline>(
+            instance, scheduler, desc_heap, profile, sel.graphics_key, *pipeline_cache, sel.infos,
+            sel.runtime_infos, sel.fetch_shader, sel.modules, sdata, true);
+    }
+    MetalShadow::GraphicsFromVulkan(sel.graphics_key, sel.modules, sel.infos, sel.runtime_infos,
+                                    sdata, pipeline);
     const auto [it, is_new] = graphics_pipelines.try_emplace(sel.graphics_key);
     ASSERT(is_new);
     it.value() = std::move(pipeline);
@@ -320,9 +323,9 @@ bool PipelineCache::LoadPipelineStage(Serialization::Archive& ar, size_t stage) 
         if (result != vk::Result::eSuccess) {
             throw Serialization::CorruptData{"cached SPIR-V rejected by the driver"};
         }
-#ifdef BB_METAL_BACKEND
-        Metal::Shadow::NoteModule(created, spv);
-#endif
+        if (MetalShadow::Enabled()) {
+            MetalShadow::RegisterModule(created, spv);
+        }
         return created;
     };
 
