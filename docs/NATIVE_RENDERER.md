@@ -422,7 +422,7 @@ blend rules (`AttachmentBlendState`) are shared. This narrows the N4 contract's 
 sees no `vk::` types: enums as data are allowed, handles and calls are not.
 
 **Shadow check.** `BB_METAL_SHADOW=1` builds every pipeline the Vulkan path creates as Metal
-pipeline states too, from the same key and SPIR-V (`mtl_shadow.cpp`), and logs the totals and each
+pipeline states too, from the same key and SPIR-V (`mtl_shadow`), and logs the totals and each
 failure. Nothing is drawn with them. A 60-second copied-save run (Hunter's Dream, 1080p, FSR,
 with the cache warm-up) built 465 graphics pipelines (15 rect lists, 17 tessellated, no geometry
 shaders met) and 35 compute pipelines, with 0 failures, at 57.6 FPS.

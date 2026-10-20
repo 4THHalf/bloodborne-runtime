@@ -3,7 +3,8 @@
 What runs Bloodborne (PS4, CUSA03173 1.09) outside a PS4: it loads the game's executable, provides
 the PS4 system libraries the game calls (threads, memory, files, saves, pad, audio, video out),
 and draws its graphics through Vulkan with a renderer derived from shadPS4, with temporal
-upscaling (FSR 3.1, FSR 4, FSR 4.1.1).
+upscaling (FSR 3.1, FSR 4, FSR 4.1.1). On macOS that Vulkan runs on MoltenVK, or, experimentally,
+the renderer encodes Metal itself ([native renderer](docs/NATIVE_RENDERER.md), `BB_METAL_FRAME=1`).
 
 It is **built on [bbport](https://github.com/deadinside28/bloodborne_pc) by deadinside28**, the
 native Linux port this work started from as a fork, whose releases keep being merged here (now 0.5)

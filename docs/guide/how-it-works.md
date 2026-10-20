@@ -28,7 +28,9 @@ game uses: memory, threads, files, audio, controllers and saves.
 
 The renderer, derived from [shadPS4](https://github.com/shadps4-emu/shadPS4), translates the PS4
 GPU's commands and shaders to Vulkan. [MoltenVK](https://github.com/KhronosGroup/MoltenVK) runs
-that Vulkan on Metal.
+that Vulkan on Metal. Development main also has an experimental native Metal renderer (the
+launcher's Advanced → Renderer): the same renderer, with its commands, shaders and pipelines
+encoded in Metal directly instead of through MoltenVK.
 
 On top of the game's own rendering, the port adds:
 
