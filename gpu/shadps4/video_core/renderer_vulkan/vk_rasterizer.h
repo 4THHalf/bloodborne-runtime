@@ -466,14 +466,14 @@ private:
     Common::SharedFirstMutex mapped_ranges_mutex;
     PipelineCache pipeline_cache;
     std::unique_ptr<DrawPreparation> draw_prep;
-    std::unique_ptr<CameraMotion> camera_motion; // bbport: motion vectors (docs/upscaler.md)
+    std::unique_ptr<CameraMotion> camera_motion; // bbport: motion vectors (bbport's docs/upscaler.md)
     std::unique_ptr<SceneTargets> scene_targets;
     bool scene_started = false;
     std::unique_ptr<ObjectMotion> object_motion;
     bool motion_draw = false;
     u64 motion_geometry{};    ///< vertex-stream identity of the current direct draw
     bool gbuffer_draw = false;
-    std::unique_ptr<TemporalUpscaler> upscaler; // bbport: FSR (docs/upscaler.md)
+    std::unique_ptr<TemporalUpscaler> upscaler; // bbport: FSR (bbport's docs/upscaler.md)
     /// bbport: stand-ins for null descriptors when the driver has none (MoltenVK), else null.
     std::unique_ptr<NullResources> null_resources;
     /// bbport: per image binding of BindTextures, the stand-in view of an empty binding.

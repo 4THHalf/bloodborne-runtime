@@ -7,8 +7,8 @@ upscaling (FSR 3.1, FSR 4, FSR 4.1.1). On macOS that Vulkan runs on MoltenVK, or
 the renderer encodes Metal itself ([native renderer](docs/NATIVE_RENDERER.md), `BB_METAL_FRAME=1`).
 
 It is **built on [bbport](https://github.com/deadinside28/bloodborne_pc) by deadinside28**, the
-native Linux port this work started from as a fork, whose releases keep being merged here (now 0.5)
-with their history. On Apple Silicon the game's code runs through bbcpu, the CPU layer of
+native Linux port this work started from as a fork, whose releases keep being merged or ported
+here (0.51, and parts of 0.6: [Upstream](docs/UPSTREAM.md)). On Apple Silicon the game's code runs through bbcpu, the CPU layer of
 [bloodborne-recomp](https://github.com/bloodborne-native/bloodborne-recomp) (the `recomp/` submodule),
 or as recompiled native code it generates.
 
@@ -30,7 +30,7 @@ bash build.sh                                  # macOS: the first run also build
 BB_GAME_DIR=/path/to/your/game bash run.sh     # your own dump, with the 1.09 update
 ```
 
-[Building](docs/guide/building.md) · [How it works](docs/guide/how-it-works.md) ·
+[Building](docs/BUILDING.md) · [Architecture](docs/ARCHITECTURE.md) ·
 [Documentation](docs/README.md) · [Credits and licenses](docs/CREDITS.md)
 
 ## Credits
