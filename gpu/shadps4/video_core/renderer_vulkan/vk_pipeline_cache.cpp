@@ -1082,7 +1082,12 @@ bool PipelineCache::RefreshGraphicsStages(PipelineSelection& sel) {
     sel.infos.fill(nullptr);
     sel.modules.fill(nullptr);
 
-    bind_stage(HwStage::Fragment, SwStage::Fragment);
+    if (!bind_stage(HwStage::Fragment, SwStage::Fragment)) {
+        // No pixel shader: the clip-distance discard shader may still be needed, decided from
+        // this draw's registers, not a previous draw's fragment stage (bbport 0.6, 8185b88).
+        sel.runtime_infos[u32(SwStage::Fragment)] =
+            BuildRuntimeInfo(sel, HwStage::Fragment, SwStage::Fragment);
+    }
 
     const auto* fs_info = sel.infos[static_cast<u32>(SwStage::Fragment)];
     key.mrt_mask = fs_info ? fs_info->mrt_mask : 0u;

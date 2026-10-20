@@ -8,6 +8,7 @@ skipped or deferred, why, and the build and game measurements that checked a por
 | bbport release | Renderer changes | Decision |
 |---|---|---|
 | 0.51 (2026-10-11) | Buffer-cache handling of GPU-written copies and low-VRAM allocation; texture-cache copy and eviction changes; swapchain retirement on Wayland; DLSS and temporal-upscaler changes and diagnostics. No shader-recompiler files changed from 0.5 in the four tracked directories. | Full release merge completed before N4. These changes are already in the Vulkan reference path; no hand port was needed. |
+| 0.6 (2026-10-19, `8185b88`) | Push constants written after the render pass begins: the occlusion results' compute dispatch, recorded when a pass begins, overwrote the draw's push constants (single frames shifted by half the screen). Draws without a pixel shader rebuild their fragment runtime info from their own registers instead of keeping the previous draw's (clip-distance discard shader). | Ported by hand into `vk_rasterizer.cpp` (both draw paths) and `vk_pipeline_cache.cpp`. Copied-save runs on MoltenVK and Metal: correct picture, no faults. The second fix cannot act on macOS (clip-distance emulation is NVIDIA-only). |
 
 The 2026-10-12 pre-N4 check found upstream HEAD at the 0.51 release commit
 `3c57da4198ad62039f63f33bfd205b9916518acf`. There was no newer release to merge.
